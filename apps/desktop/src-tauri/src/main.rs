@@ -80,7 +80,11 @@ fn stop_engine(state: State<EngineState>) -> Result<EngineStatus, String> {
     }
 
     drop(processes);
-    std::thread::sleep(Duration::from_millis(350));
+
+    stop_processes_on_port(BROKER_PORT);
+    stop_processes_on_port(APP_SERVER_PORT);
+
+    std::thread::sleep(Duration::from_millis(500));
     status_with_message(&state, "Tauri가 시작한 엔진을 종료했습니다.".to_string())
 }
 
@@ -169,6 +173,67 @@ fn stop_process_group(child: &mut Child) {
     {
         let _ = child.kill();
     }
+}
+
+#[cfg(unix)]
+fn stop_processes_on_port(address: &str) {
+    let Some(port) = address.rsplit(':').next() else {
+        return;
+    };
+
+    for pid in pids_listening_on_port(port) {
+        stop_process_id(pid);
+    }
+}
+
+#[cfg(not(unix))]
+fn stop_processes_on_port(_address: &str) {}
+
+#[cfg(unix)]
+fn pids_listening_on_port(port: &str) -> Vec<u32> {
+    for lsof in ["/usr/sbin/lsof", "/usr/bin/lsof", "lsof"] {
+        let Ok(output) = Command::new(lsof)
+            .args(["-ti", &format!("tcp:{port}"), "-sTCP:LISTEN"])
+            .output()
+        else {
+            continue;
+        };
+
+        if !output.status.success() {
+            continue;
+        }
+
+        return String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| line.trim().parse::<u32>().ok())
+            .collect();
+    }
+
+    Vec::new()
+}
+
+#[cfg(unix)]
+fn stop_process_id(pid: u32) {
+    let process_group = format!("-{pid}");
+    let process_id = pid.to_string();
+
+    let _ = Command::new("/bin/kill").args(["-TERM", &process_group]).status();
+    let _ = Command::new("/bin/kill").args(["-TERM", &process_id]).status();
+    std::thread::sleep(Duration::from_millis(250));
+
+    if process_is_running(pid) {
+        let _ = Command::new("/bin/kill").args(["-KILL", &process_group]).status();
+        let _ = Command::new("/bin/kill").args(["-KILL", &process_id]).status();
+    }
+}
+
+#[cfg(unix)]
+fn process_is_running(pid: u32) -> bool {
+    Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 fn shell_quote(value: impl AsRef<str>) -> String {

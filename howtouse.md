@@ -194,7 +194,7 @@ pnpm --filter @codex-spark/desktop tauri build
 
 ```text
 apps/desktop/src-tauri/target/release/bundle/macos/Codex Spark.app
-apps/desktop/src-tauri/target/release/bundle/dmg/Codex Spark_0.4.1_aarch64.dmg
+apps/desktop/src-tauri/target/release/bundle/dmg/Codex Spark_0.4.2_aarch64.dmg
 ```
 
 주의:
@@ -291,9 +291,9 @@ codex -m gpt-5.3-codex-spark "Reply with OK."
 
 조치:
 
-0.4.1 이후 빌드에서는 이 오류가 나오면 오래된 앱을 실행 중인 것이다.
+0.4.2 이후 빌드에서는 이 오류가 나오면 오래된 앱을 실행 중인 것이다.
 
-최신 `Codex Spark.app` 또는 `Codex Spark_0.4.1_aarch64.dmg`로 다시 설치한다.
+최신 `Codex Spark.app` 또는 `Codex Spark_0.4.2_aarch64.dmg`로 다시 설치한다.
 
 ### 8.4 Stop Engine이 안 되는 경우
 

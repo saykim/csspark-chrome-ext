@@ -34817,7 +34817,7 @@ var PORT = Number(process.env.PORT ?? 17333);
 var HOST = "127.0.0.1";
 var CODEX_WS = process.env.CODEX_WS ?? "ws://127.0.0.1:4500";
 var DEFAULT_MODEL = process.env.CODEX_MODEL ?? "gpt-5.3-codex-spark";
-var BROKER_VERSION = true ? "0.4.1" : "dev";
+var BROKER_VERSION = true ? "0.4.2" : "dev";
 var allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
