@@ -1,0 +1,659 @@
+:root {
+  font-family: "New York", "Avenir Next", "Apple SD Gothic Neo", serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
+  background: #eef1e8;
+}
+
+button,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.panel {
+  --bg: #eef1e8;
+  --bg-strong: #fbfcf6;
+  --surface: rgba(255, 255, 250, 0.82);
+  --surface-solid: #fffffa;
+  --surface-muted: #e5ecdc;
+  --line: rgba(36, 59, 47, 0.13);
+  --line-strong: rgba(36, 59, 47, 0.22);
+  --text: #17241d;
+  --muted: #66736b;
+  --faint: #89948c;
+  --accent: #264f3e;
+  --accent-soft: #d8ebcf;
+  --accent-ink: #15392d;
+  --shadow: 0 18px 60px rgba(42, 61, 47, 0.12);
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  width: 100%;
+  max-width: 100vw;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: 16px;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 16% 4%, rgba(197, 225, 184, 0.72), transparent 30%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(223, 231, 218, 0.76)),
+    var(--bg);
+}
+
+.panel[data-theme="dark"] {
+  --bg: #101411;
+  --bg-strong: #171d18;
+  --surface: rgba(23, 29, 24, 0.84);
+  --surface-solid: #1a211c;
+  --surface-muted: #222d25;
+  --line: rgba(207, 230, 201, 0.13);
+  --line-strong: rgba(207, 230, 201, 0.24);
+  --text: #eaf0e6;
+  --muted: #a6b4aa;
+  --faint: #7d8b82;
+  --accent: #cfe8c8;
+  --accent-soft: #263b2d;
+  --accent-ink: #e7f3df;
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.34);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(75, 108, 78, 0.36), transparent 34%),
+    radial-gradient(circle at 95% 22%, rgba(181, 154, 102, 0.16), transparent 26%),
+    linear-gradient(145deg, #111611, #171d18 52%, #101411),
+    var(--bg);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 38px 1fr 36px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mark,
+.themeButton {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: var(--accent-ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--accent-soft);
+  box-shadow: var(--shadow);
+}
+
+.heroText h1 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 19px;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heroText p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.themeButton {
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(127, 145, 124, 0.12);
+}
+
+.tabs button,
+.themeSetting button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 4px;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tabs button.active,
+.themeSetting button.active {
+  color: var(--accent-ink);
+  border-color: var(--line-strong);
+  background: var(--surface-solid);
+  box-shadow: 0 8px 24px rgba(27, 41, 31, 0.08);
+}
+
+.pageBox,
+.modelBox,
+.options,
+.status,
+.resultShell,
+.detailGrid,
+.settingsHeader,
+.themeSetting,
+.promptEditor {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.compactCard {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 10px;
+  padding: 10px;
+}
+
+.compactCard > div,
+.heroText,
+.resultToolbar,
+.settingsHeader > div,
+.detailItem,
+.promptEditor,
+.options label {
+  min-width: 0;
+}
+
+.captureButton,
+.actions button,
+.resultToolbar button,
+.settingsHeader button,
+.connectionHeader button {
+  min-height: 36px;
+  color: var(--accent-ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  cursor: pointer;
+}
+
+.pageBox strong,
+.pageBox span {
+  display: block;
+}
+
+.pageBox strong {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pageBox span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 43px;
+  overflow: hidden;
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.actions button svg,
+.tabs button svg,
+.resultToolbar button svg,
+.settingsHeader button svg {
+  flex: 0 0 auto;
+}
+
+.actions button:disabled,
+.resultToolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px;
+  min-width: 0;
+}
+
+.options label,
+.promptEditor,
+.themeSetting > span {
+  color: var(--muted);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 11px;
+}
+
+.options label {
+  display: grid;
+  gap: 6px;
+}
+
+.options select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 9px;
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--bg-strong);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+}
+
+.signal {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(31, 41, 38, 0.06);
+}
+
+.signal.connected {
+  background: #2f9d61;
+}
+
+.signal.mock {
+  background: #d69e2e;
+}
+
+.signal.error {
+  background: #d45a48;
+  box-shadow: 0 0 0 3px rgba(212, 90, 72, 0.18);
+}
+
+.errorBox {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(212, 90, 72, 0.45);
+  border-radius: 13px;
+  background: rgba(212, 90, 72, 0.08);
+}
+
+.errorBox .errorHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.errorBox strong {
+  color: #a13b2c;
+  font-size: 13px;
+}
+
+.errorBox code {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(212, 90, 72, 0.18);
+  color: #7a2718;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.errorBox p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.errorBox small {
+  color: var(--muted);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 11px;
+}
+
+.errorBox button {
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(212, 90, 72, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 255, 250, 0.9);
+  color: #a13b2c;
+  cursor: pointer;
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.panel[data-theme="dark"] .errorBox {
+  background: rgba(212, 90, 72, 0.14);
+}
+
+.panel[data-theme="dark"] .errorBox strong,
+.panel[data-theme="dark"] .errorBox button,
+.panel[data-theme="dark"] .errorBox code {
+  color: #f3b9ad;
+}
+
+.resultShell {
+  display: grid;
+  overflow: hidden;
+}
+
+.resultToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.resultToolbar strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.resultToolbar button,
+.settingsHeader button,
+.connectionHeader button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 9px;
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+}
+
+.result {
+  max-width: 100%;
+  min-height: 300px;
+  overflow-x: hidden;
+  padding: 15px;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 13px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+}
+
+.stackPanel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  animation: rise 180ms ease-out;
+}
+
+.modelBox {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+}
+
+.modelBox div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modelBox strong {
+  font-size: 12px;
+}
+
+.modelBox small {
+  color: var(--muted);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.connectionCard {
+  gap: 10px;
+}
+
+.connectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.connectionHeader > div {
+  min-width: 0;
+}
+
+.connectionHeader button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 9px;
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+}
+
+.connectionRows {
+  display: grid;
+  gap: 7px;
+}
+
+.connectionRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(127, 145, 124, 0.08);
+}
+
+.connectionRow > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.connectionRow strong {
+  font-size: 12px;
+}
+
+.connectionRow small {
+  overflow-wrap: anywhere;
+}
+
+.detailGrid {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.detailItem {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.detailItem:last-child {
+  border-bottom: 0;
+}
+
+.detailItem span {
+  color: var(--faint);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.detailItem strong {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  font-weight: 560;
+  line-height: 1.42;
+}
+
+.settingsHeader {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+}
+
+.settingsHeader strong,
+.settingsHeader span {
+  display: block;
+}
+
+.settingsHeader strong {
+  font-size: 13px;
+}
+
+.settingsHeader span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 11px;
+  line-height: 1.42;
+}
+
+.themeSetting {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+}
+
+.themeSetting div {
+  display: flex;
+  gap: 5px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(127, 145, 124, 0.1);
+}
+
+.themeSetting button {
+  min-height: 29px;
+  padding: 0 8px;
+}
+
+.promptList {
+  display: grid;
+  gap: 9px;
+}
+
+.promptEditor {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.promptEditor span {
+  color: var(--muted);
+}
+
+.promptEditor textarea {
+  min-height: 124px;
+  resize: vertical;
+  padding: 10px;
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg-strong);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

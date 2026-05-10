@@ -1,0 +1,12 @@
+{
+  "name": "@codex-spark/adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@codex-spark/core": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

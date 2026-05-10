@@ -1,0 +1,21 @@
+node_modules
+dist
+.turbo
+.DS_Store
+target
+src-tauri/target
+*.log
+.env
+.env.*
+*.sqlite
+*.sqlite3
+
+# Agent/local runtime state
+.omx/
+**/.omx/
+.claude/settings.local.json
+
+# Local auth/cache files
+.codex/
+**/auth.json
+**/codex-app-server-token

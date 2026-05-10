@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Codex Spark Browser Assistant",
+  "description": "현재 웹페이지를 Codex Spark로 요약, 번역, 의미 분석, 문서화합니다.",
+  "version": "0.1.0",
+  "permissions": ["activeTab", "scripting", "sidePanel", "storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1:17333/*", "https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Codex Spark",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  }
+}

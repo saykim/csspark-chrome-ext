@@ -1,0 +1,16 @@
+{
+  "name": "codex-spark-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @codex-spark/broker --filter @codex-spark/browser-extension --filter @codex-spark/desktop dev",
+    "dev:broker": "pnpm --filter @codex-spark/broker dev",
+    "dev:extension": "pnpm --filter @codex-spark/browser-extension dev",
+    "dev:desktop": "pnpm --filter @codex-spark/desktop tauri dev",
+    "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

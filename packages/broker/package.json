@@ -1,0 +1,20 @@
+{
+  "name": "@codex-spark/broker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@codex-spark/adapters": "workspace:*",
+    "@codex-spark/codex-rpc": "workspace:*",
+    "@codex-spark/core": "workspace:*",
+    "fastify": "^5.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.2",
+    "tsx": "^4.20.6"
+  }
+}

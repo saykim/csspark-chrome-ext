@@ -1,0 +1,325 @@
+:root {
+  font-family: "Avenir Next", "SF Pro Display", "Apple SD Gothic Neo", sans-serif;
+  color: #202b27;
+  background: #eef1ed;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.adminShell {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  min-height: 100vh;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.82), rgba(221, 230, 222, 0.64)),
+    #eef1ed;
+}
+
+.adminSidebar {
+  padding: 18px;
+  border-right: 1px solid rgba(36, 50, 44, 0.12);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.brandMark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #173f33;
+  border: 1px solid rgba(23, 63, 51, 0.16);
+  border-radius: 8px;
+  background: #cde7c8;
+}
+
+.brand strong,
+.brand span {
+  display: block;
+}
+
+.brand strong {
+  font-size: 15px;
+}
+
+.brand span {
+  margin-top: 2px;
+  color: #65726b;
+  font-size: 12px;
+}
+
+.adminNav {
+  display: grid;
+  gap: 8px;
+}
+
+.adminNav button,
+.refreshButton,
+.engineActions button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  color: #2f4038;
+  border: 1px solid rgba(38, 54, 47, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.adminNav .active,
+.refreshButton,
+.engineActions button {
+  background: #dcebd4;
+}
+
+.adminMain {
+  padding: 24px;
+}
+
+.adminHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.adminHeader h1 {
+  margin: 0;
+  font-size: 23px;
+  letter-spacing: 0;
+}
+
+.adminHeader p {
+  margin: 6px 0 0;
+  color: #64716a;
+  font-size: 13px;
+}
+
+.errorBanner {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  color: #7d2d2d;
+  border: 1px solid rgba(125, 45, 45, 0.18);
+  border-radius: 8px;
+  background: #f8e4df;
+}
+
+.engineHero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid rgba(38, 54, 47, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 30px rgba(36, 47, 42, 0.06);
+}
+
+.engineHero > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.engineHero strong,
+.engineHero p {
+  display: block;
+}
+
+.engineHero strong {
+  font-size: 16px;
+}
+
+.engineHero p {
+  margin: 4px 0 0;
+  color: #64716a;
+  font-size: 13px;
+}
+
+.engineDot {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 5px rgba(47, 143, 85, 0.1);
+}
+
+.goodDot {
+  background: #2f8f55;
+}
+
+.badDot {
+  background: #b94a3f;
+  box-shadow: 0 0 0 5px rgba(185, 74, 63, 0.1);
+}
+
+.engineActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.engineActions button {
+  min-width: 128px;
+  justify-content: center;
+}
+
+.engineActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.adminGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.panelCard {
+  padding: 16px;
+  border: 1px solid rgba(38, 54, 47, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 10px 30px rgba(36, 47, 42, 0.06);
+}
+
+.panelCard.wide {
+  grid-column: 1 / -1;
+}
+
+.sectionOnly {
+  width: min(100%, 920px);
+}
+
+.settingsPanel {
+  max-width: 720px;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 13px;
+}
+
+.panelTitle h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(38, 54, 47, 0.1);
+  font-size: 13px;
+}
+
+.metric strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.good {
+  color: #245743;
+}
+
+.bad {
+  color: #8a3838;
+}
+
+.warn {
+  color: #9a6a14;
+}
+
+.originList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.originList code {
+  padding: 6px 8px;
+  color: #405148;
+  border-radius: 6px;
+  background: #edf2e9;
+  font-size: 12px;
+}
+
+.requestList {
+  display: grid;
+  gap: 10px;
+}
+
+.requestList p {
+  margin: 0;
+  color: #65726b;
+}
+
+.requestList article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(38, 54, 47, 0.1);
+  border-radius: 8px;
+  background: #f8faf5;
+}
+
+.requestList span,
+.requestList small {
+  color: #65726b;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 860px) {
+  .adminShell,
+  .adminGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adminSidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(36, 50, 44, 0.12);
+  }
+
+  .engineHero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .engineActions {
+    flex-direction: column;
+  }
+
+  .engineActions button {
+    width: 100%;
+  }
+}
