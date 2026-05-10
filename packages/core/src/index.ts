@@ -2,6 +2,7 @@ export type RunMode = "read" | "edit";
 export type BrowserAction = "summarize" | "translate" | "analyze" | "document";
 export type TranslationTarget = "ko" | "en" | "ja" | "zh";
 export type DocumentFormat = "markdown" | "html";
+export type ModelSelection = "auto" | string;
 
 export type ThreadSummary = {
   id: string;
@@ -25,6 +26,7 @@ export type BrokerHealth = {
 
 export type BrokerSettings = {
   defaultModel: string;
+  actionModels: Record<BrowserAction, ModelSelection>;
   allowedOrigins: string[];
   maxPageTextChars: number;
 };

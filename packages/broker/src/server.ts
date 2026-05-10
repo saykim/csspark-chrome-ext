@@ -24,6 +24,12 @@ const allowedOrigins = [
 
 const settings: BrokerSettings = {
   defaultModel: DEFAULT_MODEL,
+  actionModels: {
+    summarize: "auto",
+    translate: "auto",
+    analyze: "auto",
+    document: "auto"
+  },
   allowedOrigins: ["chrome-extension://*", ...allowedOrigins],
   maxPageTextChars: 60000
 };
@@ -107,6 +113,16 @@ app.patch<{ Body: Partial<BrokerSettings> }>("/settings", async (request) => {
     settings.defaultModel = request.body.defaultModel.trim();
   }
 
+  if (request.body.actionModels && typeof request.body.actionModels === "object") {
+    for (const action of ["summarize", "translate", "analyze", "document"] satisfies BrowserAction[]) {
+      const model = request.body.actionModels[action];
+
+      if (typeof model === "string" && model.trim()) {
+        settings.actionModels[action] = model.trim();
+      }
+    }
+  }
+
   if (typeof request.body.maxPageTextChars === "number" && request.body.maxPageTextChars > 1000) {
     settings.maxPageTextChars = Math.min(request.body.maxPageTextChars, 160000);
   }
@@ -184,6 +200,7 @@ async function streamBrowserAction(
   const page = normalizeBrowserPage(body.page, settings.maxPageTextChars);
   const prompt = buildBrowserPrompt(action, page, body.options);
   const requestId = `browser-${Date.now()}`;
+  const model = await resolveModel(action, body.model);
 
   recentRequests.unshift({
     id: requestId,
@@ -195,12 +212,12 @@ async function streamBrowserAction(
 
   startSse(reply, origin);
   writeSse(reply, "status", { label: "페이지 내용 정리 완료" });
-  writeSse(reply, "status", { label: `${body.model ?? settings.defaultModel} 연결 시도 중` });
+  writeSse(reply, "status", { label: `${model} 연결 시도 중` });
 
   try {
     await rpc.runBrowserPrompt({
       prompt,
-      model: body.model ?? settings.defaultModel,
+      model,
       threadId: body.threadId,
       cwd: process.cwd(),
       serviceName: "codex-spark-browser",
@@ -209,7 +226,7 @@ async function streamBrowserAction(
       }
     });
 
-    writeSse(reply, "done", { ok: true, requestId, truncated: page.truncated });
+    writeSse(reply, "done", { ok: true, requestId, truncated: page.truncated, model });
   } catch (error) {
     writeSse(reply, "error", {
       error: getErrorMessage(error)
@@ -300,11 +317,48 @@ async function getModelHealth() {
   }
 }
 
-function findModel(models: unknown, modelId: string) {
-  const value = models as { data?: Array<{ id?: string; name?: string }>; models?: Array<{ id?: string; name?: string }> };
-  const list = value.data ?? value.models ?? [];
+async function resolveModel(action: BrowserAction, requestModel?: string) {
+  const actionModel = settings.actionModels[action];
+  const preferred = normalizeModelSelection(requestModel) ?? normalizeModelSelection(actionModel) ?? settings.defaultModel;
 
-  return list.find((model) => model.id === modelId || model.name === modelId);
+  try {
+    const models = await rpc.listModels();
+    const preferredModel = findModel(models, preferred);
+
+    if (preferredModel?.id || preferredModel?.name) {
+      return preferredModel.id ?? preferredModel.name ?? preferred;
+    }
+
+    const defaultModel = findModel(models, settings.defaultModel);
+
+    if (defaultModel?.id || defaultModel?.name) {
+      return defaultModel.id ?? defaultModel.name ?? settings.defaultModel;
+    }
+
+    const [firstModel] = extractModelList(models);
+    return firstModel?.id ?? firstModel?.name ?? preferred;
+  } catch {
+    return preferred;
+  }
+}
+
+function normalizeModelSelection(value: string | undefined) {
+  const normalized = value?.trim();
+
+  if (!normalized || normalized === "auto") {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function findModel(models: unknown, modelId: string) {
+  return extractModelList(models).find((model) => model.id === modelId || model.name === modelId);
+}
+
+function extractModelList(models: unknown) {
+  const value = models as { data?: Array<{ id?: string; name?: string }>; models?: Array<{ id?: string; name?: string }> };
+  return value.data ?? value.models ?? [];
 }
 
 function forwardCodexNotification(reply: FastifyReply, notification: CodexRpcNotification) {

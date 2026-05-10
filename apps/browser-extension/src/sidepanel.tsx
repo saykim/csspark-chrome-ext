@@ -33,6 +33,18 @@ type BrokerHealthStatus = {
   detail: string;
 };
 
+type BrokerSettings = {
+  defaultModel: string;
+  actionModels: Record<BrowserAction, string>;
+  allowedOrigins: string[];
+  maxPageTextChars: number;
+};
+
+type ModelOption = {
+  id: string;
+  name?: string;
+};
+
 type PanelTab = "work" | "details" | "settings";
 type ThemeMode = "light" | "dark";
 type PromptTemplates = Record<BrowserAction, string>;
@@ -100,6 +112,9 @@ function SidePanel() {
   const [documentFormat, setDocumentFormat] = useState("markdown");
   const [copied, setCopied] = useState(false);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplates>(() => readPromptTemplates());
+  const [brokerSettings, setBrokerSettings] = useState<BrokerSettings | null>(null);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [healthChecking, setHealthChecking] = useState(false);
   const [healthCheckedAt, setHealthCheckedAt] = useState("확인 전");
   const [brokerHealth, setBrokerHealth] = useState<BrokerHealthStatus>({
@@ -115,6 +130,7 @@ function SidePanel() {
 
   useEffect(() => {
     void refreshHealth();
+    void refreshBrokerSettings();
   }, []);
 
   useEffect(() => {
@@ -195,6 +211,80 @@ function SidePanel() {
     }
   }
 
+  async function refreshBrokerSettings() {
+    try {
+      const [settingsResponse, modelsResponse] = await Promise.all([
+        fetch(`${brokerUrl}/settings`),
+        fetch(`${brokerUrl}/models`)
+      ]);
+
+      if (settingsResponse.ok) {
+        const settings = await settingsResponse.json();
+        setBrokerSettings(normalizeBrokerSettings(settings));
+      }
+
+      if (modelsResponse.ok) {
+        setModelOptions(extractModelOptions(await modelsResponse.json()));
+      }
+    } catch {
+      setBrokerSettings(null);
+      setModelOptions([]);
+    }
+  }
+
+  async function patchBrokerSettings(nextSettings: BrokerSettings) {
+    setBrokerSettings(nextSettings);
+    setSettingsSaving(true);
+
+    try {
+      const response = await fetch(`${brokerUrl}/settings`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          defaultModel: nextSettings.defaultModel,
+          actionModels: nextSettings.actionModels
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+
+      setBrokerSettings(normalizeBrokerSettings(await response.json()));
+      await refreshHealth();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLastError({
+        code: classifyErrorCode(error),
+        message,
+        at: new Date().toLocaleTimeString()
+      });
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  function updateDefaultModel(model: string) {
+    const current = brokerSettings ?? defaultBrokerSettings();
+    void patchBrokerSettings({
+      ...current,
+      defaultModel: model
+    });
+  }
+
+  function updateActionModel(action: BrowserAction, model: string) {
+    const current = brokerSettings ?? defaultBrokerSettings();
+    void patchBrokerSettings({
+      ...current,
+      actionModels: {
+        ...current.actionModels,
+        [action]: model
+      }
+    });
+  }
+
   async function runAction(action: BrowserAction) {
     setRunningAction(action);
     setResult("");
@@ -222,7 +312,6 @@ function SidePanel() {
         body: JSON.stringify({
           action,
           page: activePage,
-          model: "gpt-5.3-codex-spark",
           source: "chrome-extension",
           options: {
             targetLanguage,
@@ -495,12 +584,40 @@ function SidePanel() {
         <section className="stackPanel">
           <div className="settingsHeader">
             <div>
-              <strong>프롬프트 설정</strong>
-              <span>기본값은 현재 만족한 출력 기준과 동일합니다. 수정 시에만 Broker로 override를 보냅니다.</span>
+              <strong>모델 정책</strong>
+              <span>최종 모델 결정은 Broker가 합니다. Chrome 확장은 선택 UI만 제공합니다.</span>
             </div>
-            <button onClick={resetPromptTemplates} type="button">
-              <RotateCcw size={14} /> 기본값
+            <button onClick={() => void refreshBrokerSettings()} type="button">
+              <RefreshCw size={14} /> 모델 새로고침
             </button>
+          </div>
+
+          <div className="modelPolicy">
+            <label>
+              기본 모델
+              <ModelSelect
+                value={brokerSettings?.defaultModel ?? "gpt-5.3-codex-spark"}
+                models={modelOptions}
+                includeAuto={false}
+                disabled={settingsSaving}
+                onChange={updateDefaultModel}
+              />
+            </label>
+
+            {actions.map((action) => (
+              <label key={action.id}>
+                {action.shortLabel} 모델
+                <ModelSelect
+                  value={brokerSettings?.actionModels?.[action.id] ?? "auto"}
+                  models={modelOptions}
+                  includeAuto
+                  disabled={settingsSaving}
+                  onChange={(model) => updateActionModel(action.id, model)}
+                />
+              </label>
+            ))}
+
+            <small>{settingsSaving ? "Broker 설정 저장 중" : "auto는 Broker 기본 모델과 fallback 정책을 사용합니다."}</small>
           </div>
 
           <div className="themeSetting">
@@ -513,6 +630,16 @@ function SidePanel() {
                 <Moon size={14} /> Dark
               </button>
             </div>
+          </div>
+
+          <div className="settingsHeader">
+            <div>
+              <strong>프롬프트 설정</strong>
+              <span>기본값은 현재 만족한 출력 기준과 동일합니다. 수정 시에만 Broker로 override를 보냅니다.</span>
+            </div>
+            <button onClick={resetPromptTemplates} type="button">
+              <RotateCcw size={14} /> 기본값
+            </button>
           </div>
 
           <div className="promptList">
@@ -530,6 +657,34 @@ function SidePanel() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function ModelSelect({
+  value,
+  models,
+  includeAuto,
+  disabled,
+  onChange
+}: {
+  value: string;
+  models: ModelOption[];
+  includeAuto: boolean;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}>
+      {includeAuto ? <option value="auto">auto</option> : null}
+      {models.map((model) => (
+        <option key={model.id} value={model.id}>
+          {model.id}
+        </option>
+      ))}
+      {value && value !== "auto" && !models.some((model) => model.id === value) ? (
+        <option value={value}>{value}</option>
+      ) : null}
+    </select>
   );
 }
 
@@ -580,6 +735,43 @@ function readPromptTemplates(): PromptTemplates {
   } catch {
     return defaultPromptTemplates;
   }
+}
+
+function defaultBrokerSettings(): BrokerSettings {
+  return {
+    defaultModel: "gpt-5.3-codex-spark",
+    actionModels: {
+      summarize: "auto",
+      translate: "auto",
+      analyze: "auto",
+      document: "auto"
+    },
+    allowedOrigins: [],
+    maxPageTextChars: 60000
+  };
+}
+
+function normalizeBrokerSettings(value: Partial<BrokerSettings>): BrokerSettings {
+  return {
+    ...defaultBrokerSettings(),
+    ...value,
+    actionModels: {
+      ...defaultBrokerSettings().actionModels,
+      ...(value.actionModels ?? {})
+    }
+  };
+}
+
+function extractModelOptions(value: unknown): ModelOption[] {
+  const modelResponse = value as { data?: ModelOption[]; models?: ModelOption[] };
+  const models = modelResponse.data ?? modelResponse.models ?? [];
+
+  return models
+    .map((model) => ({
+      id: model.id ?? model.name ?? "",
+      name: model.name
+    }))
+    .filter((model) => model.id);
 }
 
 function isNetworkError(error: unknown): boolean {
