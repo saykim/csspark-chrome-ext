@@ -31,8 +31,16 @@ type BrokerHealth = {
 
 type BrokerSettings = {
   defaultModel: string;
+  actionModels: Record<BrowserAction, string>;
   allowedOrigins: string[];
   maxPageTextChars: number;
+};
+
+type BrowserAction = "summarize" | "translate" | "analyze" | "document";
+
+type ModelOption = {
+  id: string;
+  name?: string;
 };
 
 type RecentRequest = {
@@ -65,10 +73,12 @@ export function App() {
   const [activeSection, setActiveSection] = useState<AdminSection>("status");
   const [health, setHealth] = useState<BrokerHealth | null>(null);
   const [settings, setSettings] = useState<BrokerSettings | null>(null);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [requests, setRequests] = useState<RecentRequest[]>([]);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>(emptyEngineStatus);
   const [error, setError] = useState<string | null>(null);
   const [engineBusy, setEngineBusy] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
 
   useEffect(() => {
     void refresh();
@@ -89,10 +99,11 @@ export function App() {
 
   async function refreshBrokerData() {
     try {
-      const [healthResponse, settingsResponse, requestsResponse] = await Promise.all([
+      const [healthResponse, settingsResponse, requestsResponse, modelsResponse] = await Promise.all([
         fetch(`${brokerUrl}/health`),
         fetch(`${brokerUrl}/settings`),
-        fetch(`${brokerUrl}/requests`)
+        fetch(`${brokerUrl}/requests`),
+        fetch(`${brokerUrl}/models`)
       ]);
 
       if (!healthResponse.ok || !settingsResponse.ok || !requestsResponse.ok) {
@@ -100,15 +111,65 @@ export function App() {
       }
 
       setHealth(await healthResponse.json());
-      setSettings(await settingsResponse.json());
+      setSettings(normalizeBrokerSettings(await settingsResponse.json()));
       setRequests((await requestsResponse.json()).requests ?? []);
+      setModelOptions(modelsResponse.ok ? extractModelOptions(await modelsResponse.json()) : []);
       setError(null);
     } catch (refreshError) {
       setHealth(null);
       setSettings(null);
+      setModelOptions([]);
       setRequests([]);
       setError(refreshError instanceof Error ? refreshError.message : "Broker에 연결할 수 없습니다.");
     }
+  }
+
+  async function patchSettings(nextSettings: BrokerSettings) {
+    setSettings(nextSettings);
+    setSettingsBusy(true);
+
+    try {
+      const response = await fetch(`${brokerUrl}/settings`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          defaultModel: nextSettings.defaultModel,
+          actionModels: nextSettings.actionModels
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Broker 설정 저장에 실패했습니다.");
+      }
+
+      setSettings(normalizeBrokerSettings(await response.json()));
+      await refreshBrokerData();
+    } catch (settingsError) {
+      setError(settingsError instanceof Error ? settingsError.message : String(settingsError));
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
+  function updateDefaultModel(model: string) {
+    const current = settings ?? defaultBrokerSettings();
+    void patchSettings({
+      ...current,
+      defaultModel: model
+    });
+  }
+
+  function updateActionModel(action: BrowserAction, model: string) {
+    const current = settings ?? defaultBrokerSettings();
+    void patchSettings({
+      ...current,
+      actionModels: {
+        ...current.actionModels,
+        [action]: model
+      }
+    });
   }
 
   async function startEngine() {
@@ -299,9 +360,30 @@ export function App() {
               <Settings size={17} />
               <h2>설정</h2>
             </div>
-            <div className="metric">
-              <span>기본 모델</span>
-              <strong>{settings?.defaultModel ?? "gpt-5.3-codex-spark"}</strong>
+            <div className="modelSettings">
+              <label>
+                기본 모델
+                <ModelSelect
+                  value={settings?.defaultModel ?? "gpt-5.3-codex-spark"}
+                  models={modelOptions}
+                  includeAuto={false}
+                  disabled={settingsBusy || !settings}
+                  onChange={updateDefaultModel}
+                />
+              </label>
+              {browserActions.map((action) => (
+                <label key={action.id}>
+                  {action.label} 모델
+                  <ModelSelect
+                    value={settings?.actionModels?.[action.id] ?? "auto"}
+                    models={modelOptions}
+                    includeAuto
+                    disabled={settingsBusy || !settings}
+                    onChange={(model) => updateActionModel(action.id, model)}
+                  />
+                </label>
+              ))}
+              <small>{settingsBusy ? "설정 저장 중" : "auto는 Broker가 기본 모델과 fallback 정책으로 결정합니다."}</small>
             </div>
             <div className="metric">
               <span>본문 제한</span>
@@ -317,6 +399,78 @@ export function App() {
       </section>
     </main>
   );
+}
+
+const browserActions: Array<{ id: BrowserAction; label: string }> = [
+  { id: "summarize", label: "요약" },
+  { id: "translate", label: "번역" },
+  { id: "analyze", label: "의미 분석" },
+  { id: "document", label: "문서화" }
+];
+
+function ModelSelect({
+  value,
+  models,
+  includeAuto,
+  disabled,
+  onChange
+}: {
+  value: string;
+  models: ModelOption[];
+  includeAuto: boolean;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}>
+      {includeAuto ? <option value="auto">auto</option> : null}
+      {models.map((model) => (
+        <option key={model.id} value={model.id}>
+          {model.id}
+        </option>
+      ))}
+      {value && value !== "auto" && !models.some((model) => model.id === value) ? (
+        <option value={value}>{value}</option>
+      ) : null}
+    </select>
+  );
+}
+
+function defaultBrokerSettings(): BrokerSettings {
+  return {
+    defaultModel: "gpt-5.3-codex-spark",
+    actionModels: {
+      summarize: "auto",
+      translate: "auto",
+      analyze: "auto",
+      document: "auto"
+    },
+    allowedOrigins: [],
+    maxPageTextChars: 60000
+  };
+}
+
+function normalizeBrokerSettings(value: Partial<BrokerSettings>): BrokerSettings {
+  return {
+    ...defaultBrokerSettings(),
+    ...value,
+    actionModels: {
+      ...defaultBrokerSettings().actionModels,
+      ...(value.actionModels ?? {})
+    }
+  };
+}
+
+function extractModelOptions(value: unknown): ModelOption[] {
+  const response = value as { data?: ModelOption[]; models?: ModelOption[] };
+  const models = response.data ?? response.models ?? [];
+
+  return models
+    .map((model) => ({
+      id: model.id ?? model.name ?? "",
+      name: model.name
+    }))
+    .filter((model) => model.id);
 }
 
 function managedLabel(running: boolean, managed: boolean) {

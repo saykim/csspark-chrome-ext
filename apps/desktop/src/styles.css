@@ -22,6 +22,10 @@ button {
   cursor: pointer;
 }
 
+select {
+  font: inherit;
+}
+
 .adminShell {
   display: grid;
   grid-template-columns: 250px 1fr;
@@ -217,6 +221,41 @@ button {
 
 .settingsPanel {
   max-width: 720px;
+}
+
+.modelSettings {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(38, 54, 47, 0.1);
+}
+
+.modelSettings label {
+  display: grid;
+  gap: 6px;
+  color: #65726b;
+  font-size: 12px;
+}
+
+.modelSettings select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  color: #202b27;
+  border: 1px solid rgba(38, 54, 47, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.modelSettings select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.modelSettings small {
+  color: #65726b;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .panelTitle {
