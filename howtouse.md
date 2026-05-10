@@ -32,26 +32,36 @@ Broker / app-server 상태 관리
 
 ## 2. 새 컴퓨터에서 필요한 것
 
-필수:
+설치된 앱으로 사용할 때 필수:
 
 ```text
 Node.js
-pnpm
-Rust / Cargo
-Tauri prerequisites
 Codex CLI
 Chrome Browser
 ```
 
-macOS 기준 권장 설치 확인:
+소스에서 개발하거나 다시 빌드할 때 추가로 필요:
+
+```text
+pnpm
+Rust / Cargo
+Tauri prerequisites
+```
+
+macOS 기준 설치 확인:
 
 ```bash
 node -v
 npm -v
+codex --version
+```
+
+개발/빌드까지 한다면 다음도 확인한다.
+
+```bash
 pnpm -v
 rustc --version
 cargo --version
-codex --version
 ```
 
 pnpm이 없으면:
@@ -80,6 +90,8 @@ codex -m gpt-5.3-codex-spark "Reply with OK."
 
 ## 3. 프로젝트 내려받기
 
+소스에서 개발하거나 직접 빌드할 때만 필요하다.
+
 ```bash
 git clone <REPO_URL>
 cd codex-spark-app
@@ -102,6 +114,8 @@ Tauri 앱에서 `Start Engine`을 누르면 다음 두 프로세스를 실행해
 Codex app-server: ws://127.0.0.1:4500
 Broker: http://127.0.0.1:17333
 ```
+
+빌드된 Tauri 앱은 Broker를 앱에 포함된 번들 파일로 실행한다. 따라서 일반 사용자는 `pnpm dev:broker`를 따로 실행하지 않아도 된다.
 
 상태 화면에서 다음처럼 보여야 한다.
 
@@ -180,14 +194,14 @@ pnpm --filter @codex-spark/desktop tauri build
 
 ```text
 apps/desktop/src-tauri/target/release/bundle/macos/Codex Spark.app
-apps/desktop/src-tauri/target/release/bundle/dmg/Codex Spark_0.1.0_aarch64.dmg
+apps/desktop/src-tauri/target/release/bundle/dmg/Codex Spark_0.4.1_aarch64.dmg
 ```
 
 주의:
 
-현재 Tauri 앱은 완전한 독립 앱이 아니다. 앱 내부에 Broker가 번들링되어 있지 않고, 프로젝트 루트를 찾아 `pnpm --filter @codex-spark/broker dev`로 Broker를 실행한다.
+현재 Tauri 앱은 Broker를 내장 번들로 실행한다. 프로젝트 루트를 찾거나 `pnpm --filter @codex-spark/broker dev`를 실행하지 않는다.
 
-따라서 다른 컴퓨터에서도 프로젝트 소스, Node.js, pnpm, Codex CLI가 필요하다.
+다만 Broker 번들은 Node.js로 실행되므로 설치된 앱을 쓰는 컴퓨터에도 Node.js와 Codex CLI는 필요하다. `pnpm`과 Rust/Cargo는 소스 개발/빌드 시에만 필요하다.
 
 ## 7. Windows에서 실행할 때
 
@@ -277,13 +291,9 @@ codex -m gpt-5.3-codex-spark "Reply with OK."
 
 조치:
 
-환경변수로 프로젝트 루트를 지정한다.
+0.4.1 이후 빌드에서는 이 오류가 나오면 오래된 앱을 실행 중인 것이다.
 
-```bash
-export CODEX_SPARK_REPO_ROOT="/path/to/codex-spark-app"
-```
-
-그 다음 앱을 다시 실행한다.
+최신 `Codex Spark.app` 또는 `Codex Spark_0.4.1_aarch64.dmg`로 다시 설치한다.
 
 ### 8.4 Stop Engine이 안 되는 경우
 
@@ -348,13 +358,13 @@ target
 목표는 Chrome Extension + Local Broker + Codex app-server + Tauri 관리 앱을 실행하는 것이다.
 
 먼저 README 대신 howtouse.md를 읽고, 현재 OS에 맞게 설치 상태를 확인해라.
-Node.js, pnpm, Rust/Cargo, Codex CLI가 있는지 확인하고 없으면 설치 안내를 해라.
-그 다음 pnpm install을 실행하고, Codex CLI 로그인을 확인해라.
+설치된 앱으로 사용할 경우 Node.js, Codex CLI, Chrome Browser가 있는지 확인하고, Codex CLI 로그인을 확인해라.
+소스에서 개발하거나 다시 빌드할 경우에만 pnpm, Rust/Cargo, Tauri prerequisites를 확인하고 pnpm install을 실행해라.
 
 실행 검증 순서는 다음이다.
 1. codex -m gpt-5.3-codex-spark "Reply with OK." 확인
-2. codex app-server --listen ws://127.0.0.1:4500 실행 또는 Tauri Start Engine 사용
-3. pnpm dev:broker 실행 또는 Tauri Start Engine 사용
+2. Tauri Start Engine 사용
+3. 필요한 경우에만 수동으로 codex app-server와 pnpm dev:broker 실행
 4. curl http://127.0.0.1:17333/health 확인
 5. Chrome Extension을 빌드하고 apps/browser-extension/dist를 Load unpacked로 설치
 6. Chrome Extension에서 정보 탭 Refresh로 Broker와 Codex 상태가 초록인지 확인
@@ -364,16 +374,14 @@ Node.js, pnpm, Rust/Cargo, Codex CLI가 있는지 확인하고 없으면 설치 
 
 ## 11. 현재 한계
 
-현재 프로젝트는 `소스 기반 로컬 사용`에 적합하다.
+현재 프로젝트는 `앱 중심 로컬 사용`에 가깝다.
 
-아직 완전한 독립 배포 앱은 아니다.
+Tauri 앱이 Broker를 내장 번들로 실행하므로 일반 사용자는 `pnpm dev:broker` 없이 사용할 수 있다.
 
 완전한 앱 배포를 위해 남은 일:
 
 ```text
-Broker를 Tauri sidecar로 번들링
-또는 Broker를 단일 바이너리로 패키징
-또는 Broker 기능을 Rust/Tauri 쪽으로 일부 흡수
+Node.js 없는 Broker 단일 바이너리 또는 Rust 내장화
 Windows용 Start/Stop Engine 구현
 설정 저장소 정리
 요청 로그 영속화

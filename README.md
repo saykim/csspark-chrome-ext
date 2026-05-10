@@ -30,13 +30,20 @@ Broker / app-server 상태 관리
 
 ## 빠른 시작
 
-필수 도구:
+설치된 앱으로 사용할 때 필수 도구:
 
 ```bash
 node -v
+codex --version
+```
+
+`pnpm`, Rust/Cargo는 소스 개발과 앱 빌드에만 필요합니다. 빌드된 Tauri 앱은 Broker를 내장 번들로 실행하므로 `pnpm dev:broker`가 필요하지 않습니다.
+
+개발/빌드까지 할 때 필요한 도구:
+
+```bash
 pnpm -v
 cargo --version
-codex --version
 ```
 
 설치:
@@ -66,7 +73,7 @@ pnpm dev:desktop
 
 ```text
 Codex app-server: ws://127.0.0.1:4500
-Broker: http://127.0.0.1:17333
+Broker: http://127.0.0.1:17333 (Tauri 앱에 포함된 Broker 번들)
 ```
 
 수동 실행도 가능합니다.
@@ -119,13 +126,13 @@ apps/desktop/src-tauri/target/release/bundle/macos/Codex Spark.app
 
 ## 현재 한계
 
-현재는 소스 기반 로컬 사용에 적합합니다. 완전한 독립 배포 앱은 아닙니다.
+현재 Tauri 앱은 Broker를 내장 번들로 실행합니다. 따라서 설치된 앱 사용에는 프로젝트 소스와 `pnpm dev:broker`가 필요하지 않습니다.
 
-다른 컴퓨터에서 사용하려면 Node.js, pnpm, Rust/Cargo, Codex CLI, 프로젝트 소스가 필요합니다.
+다른 컴퓨터에서 설치된 앱을 사용하려면 Node.js와 Codex CLI 로그인이 필요합니다. 소스에서 직접 개발/빌드하려면 Node.js, pnpm, Rust/Cargo, Codex CLI, 프로젝트 소스가 필요합니다.
 
 향후 개선 방향:
 
-- Broker sidecar 번들링
+- Node.js 없는 완전 독립 Broker sidecar
 - Windows용 Tauri Start/Stop Engine 구현
 - 사용자 정의 역할/프롬프트 확장
 - 요청 로그 영속화

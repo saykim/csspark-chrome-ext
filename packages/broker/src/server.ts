@@ -11,10 +11,13 @@ import type {
   ThreadSummary
 } from "@codex-spark/core";
 
+declare const __BROKER_VERSION__: string | undefined;
+
 const PORT = Number(process.env.PORT ?? 17333);
 const HOST = "127.0.0.1";
 const CODEX_WS = process.env.CODEX_WS ?? "ws://127.0.0.1:4500";
 const DEFAULT_MODEL = process.env.CODEX_MODEL ?? "gpt-5.3-codex-spark";
+const BROKER_VERSION = typeof __BROKER_VERSION__ === "string" ? __BROKER_VERSION__ : "dev";
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -81,7 +84,7 @@ app.get("/health", async () => {
   return {
     ok: true,
     name: "codex-spark-broker",
-    version: "0.1.0",
+    version: BROKER_VERSION,
     mode: "browser-assistant",
     model: await getModelHealth()
   };

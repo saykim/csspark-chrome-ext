@@ -1,11 +1,11 @@
 {
   "name": "@codex-spark/desktop",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "pnpm --filter @codex-spark/broker bundle:desktop && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },

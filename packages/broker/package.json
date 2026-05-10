@@ -1,10 +1,11 @@
 {
   "name": "@codex-spark/broker",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "bundle:desktop": "node scripts/bundle.mjs",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.2",
+    "esbuild": "^0.27.7",
     "tsx": "^4.20.6"
   }
 }

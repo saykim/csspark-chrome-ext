@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::fs;
 use std::net::{SocketAddr, TcpStream};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -11,6 +12,7 @@ use tauri::State;
 const APP_SERVER_URL: &str = "ws://127.0.0.1:4500";
 const APP_SERVER_PORT: &str = "127.0.0.1:4500";
 const BROKER_PORT: &str = "127.0.0.1:17333";
+const EMBEDDED_BROKER: &str = include_str!("../resources/broker/server.mjs");
 
 #[derive(Default)]
 struct EngineProcesses {
@@ -36,19 +38,24 @@ fn engine_status(state: State<EngineState>) -> Result<EngineStatus, String> {
 
 #[tauri::command]
 fn start_engine(state: State<EngineState>) -> Result<EngineStatus, String> {
-    let repo_root = find_repo_root()?;
+    let runtime_cwd = runtime_cwd();
     let mut processes = state.lock().map_err(|_| "engine state lock failed".to_string())?;
 
     if !is_port_open(APP_SERVER_PORT) && processes.app_server.is_none() {
-        let child = shell_child(&format!("exec codex app-server --listen {}", shell_quote(APP_SERVER_URL)), &repo_root)
+        let child = shell_child(&format!("exec codex app-server --listen {}", shell_quote(APP_SERVER_URL)), &runtime_cwd)
             .map_err(|error| format!("codex app-server 실행 실패: {error}"))?;
 
         processes.app_server = Some(child);
     }
 
     if !is_port_open(BROKER_PORT) && processes.broker.is_none() {
-        let child = shell_child("exec pnpm --filter @codex-spark/broker dev", &repo_root)
-            .map_err(|error| format!("Broker 개발 서버 실행 실패: {error}"))?;
+        let broker_path = write_embedded_broker()?;
+        let child = shell_child(&format!("exec node {}", shell_quote(&broker_path.to_string_lossy())), &runtime_cwd)
+            .map_err(|error| {
+                format!(
+                    "Broker 실행 실패: {error}. Node.js가 설치되어 있고 터미널 PATH에서 node가 보이는지 확인하세요."
+                )
+            })?;
 
         processes.broker = Some(child);
     }
@@ -128,6 +135,22 @@ fn shell_child(command: &str, cwd: &Path) -> std::io::Result<Child> {
     command.spawn()
 }
 
+fn runtime_cwd() -> PathBuf {
+    std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir())
+}
+
+fn write_embedded_broker() -> Result<PathBuf, String> {
+    let broker_dir = std::env::temp_dir().join("codex-spark");
+    let broker_path = broker_dir.join("broker-server.mjs");
+
+    fs::create_dir_all(&broker_dir)
+        .map_err(|error| format!("Broker 임시 폴더 생성 실패: {error}"))?;
+    fs::write(&broker_path, EMBEDDED_BROKER)
+        .map_err(|error| format!("Broker 내장 파일 생성 실패: {error}"))?;
+
+    Ok(broker_path)
+}
+
 fn stop_process_group(child: &mut Child) {
     #[cfg(unix)]
     {
@@ -150,50 +173,6 @@ fn stop_process_group(child: &mut Child) {
 
 fn shell_quote(value: impl AsRef<str>) -> String {
     format!("'{}'", value.as_ref().replace('\'', "'\\''"))
-}
-
-fn find_repo_root() -> Result<PathBuf, String> {
-    if let Ok(configured_root) = std::env::var("CODEX_SPARK_REPO_ROOT") {
-        let configured_path = PathBuf::from(configured_root);
-
-        if let Some(root) = find_repo_root_from(&configured_path) {
-            return Ok(root);
-        }
-    }
-
-    let current_dir = std::env::current_dir().map_err(|error| format!("현재 경로 확인 실패: {error}"))?;
-
-    if let Some(root) = find_repo_root_from(&current_dir) {
-        return Ok(root);
-    }
-
-    let exe = std::env::current_exe().map_err(|error| format!("실행 파일 경로 확인 실패: {error}"))?;
-
-    if let Some(parent) = exe.parent() {
-        if let Some(root) = find_repo_root_from(parent) {
-            return Ok(root);
-        }
-    }
-
-    let build_manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-
-    if let Some(root) = find_repo_root_from(&build_manifest_dir) {
-        return Ok(root);
-    }
-
-    Err("프로젝트 루트를 찾을 수 없습니다. CODEX_SPARK_REPO_ROOT를 codex-spark-app 경로로 설정하거나, codex-spark-app 안에서 Tauri를 실행해야 합니다.".to_string())
-}
-
-fn find_repo_root_from(start: &Path) -> Option<PathBuf> {
-    for candidate in start.ancestors() {
-        if candidate.join("packages/broker/package.json").exists()
-            && candidate.join("apps/desktop/package.json").exists()
-        {
-            return Some(candidate.to_path_buf());
-        }
-    }
-
-    None
 }
 
 fn main() {

@@ -1,6 +1,6 @@
 [package]
 name = "codex-spark-app"
-version = "0.3.0"
+version = "0.4.1"
 description = "Personal Codex Spark desktop assistant"
 authors = ["kimsy"]
 edition = "2021"
