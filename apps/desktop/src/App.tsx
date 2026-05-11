@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 
 const brokerUrl = "http://127.0.0.1:17333";
+const brokerSettingsStorageKey = "codex-spark.brokerSettings.v1";
 
 type BrokerHealth = {
   ok: boolean;
@@ -72,7 +73,7 @@ const emptyEngineStatus: EngineStatus = {
 export function App() {
   const [activeSection, setActiveSection] = useState<AdminSection>("status");
   const [health, setHealth] = useState<BrokerHealth | null>(null);
-  const [settings, setSettings] = useState<BrokerSettings | null>(null);
+  const [settings, setSettings] = useState<BrokerSettings | null>(() => readCachedBrokerSettings());
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [requests, setRequests] = useState<RecentRequest[]>([]);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>(emptyEngineStatus);
@@ -111,20 +112,24 @@ export function App() {
       }
 
       setHealth(await healthResponse.json());
-      setSettings(normalizeBrokerSettings(await settingsResponse.json()));
+      const settings = normalizeBrokerSettings(await settingsResponse.json());
+      setSettings(settings);
+      writeCachedBrokerSettings(settings);
       setRequests((await requestsResponse.json()).requests ?? []);
       setModelOptions(modelsResponse.ok ? extractModelOptions(await modelsResponse.json()) : []);
       setError(null);
+      return true;
     } catch (refreshError) {
       setHealth(null);
-      setSettings(null);
       setModelOptions([]);
       setRequests([]);
       setError(refreshError instanceof Error ? refreshError.message : "Broker에 연결할 수 없습니다.");
+      return false;
     }
   }
 
   async function patchSettings(nextSettings: BrokerSettings) {
+    const previousSettings = settings;
     setSettings(nextSettings);
     setSettingsBusy(true);
 
@@ -144,9 +149,12 @@ export function App() {
         throw new Error("Broker 설정 저장에 실패했습니다.");
       }
 
-      setSettings(normalizeBrokerSettings(await response.json()));
+      const settings = normalizeBrokerSettings(await response.json());
+      setSettings(settings);
+      writeCachedBrokerSettings(settings);
       await refreshBrokerData();
     } catch (settingsError) {
+      setSettings(previousSettings);
       setError(settingsError instanceof Error ? settingsError.message : String(settingsError));
     } finally {
       setSettingsBusy(false);
@@ -178,11 +186,22 @@ export function App() {
     try {
       const status = await invoke<EngineStatus>("start_engine");
       setEngineStatus(status);
-      await refreshBrokerData();
+      await waitForBrokerData();
+      await refreshEngineStatus();
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : String(startError));
     } finally {
       setEngineBusy(false);
+    }
+  }
+
+  async function waitForBrokerData() {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      if (await refreshBrokerData()) {
+        return;
+      }
+
+      await sleep(500);
     }
   }
 
@@ -450,6 +469,20 @@ function defaultBrokerSettings(): BrokerSettings {
   };
 }
 
+function readCachedBrokerSettings(): BrokerSettings | null {
+  try {
+    const stored = localStorage.getItem(brokerSettingsStorageKey);
+
+    return stored ? normalizeBrokerSettings(JSON.parse(stored) as Partial<BrokerSettings>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedBrokerSettings(settings: BrokerSettings) {
+  localStorage.setItem(brokerSettingsStorageKey, JSON.stringify(settings));
+}
+
 function normalizeBrokerSettings(value: Partial<BrokerSettings>): BrokerSettings {
   return {
     ...defaultBrokerSettings(),
@@ -479,6 +512,10 @@ function managedLabel(running: boolean, managed: boolean) {
   }
 
   return managed ? "Tauri가 시작함" : "외부에서 실행됨";
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function sectionTitle(section: AdminSection) {

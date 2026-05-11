@@ -1,4 +1,7 @@
 import Fastify, { type FastifyReply } from "fastify";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { buildBrowserPrompt, normalizeBrowserPage } from "@codex-spark/adapters";
 import { CodexRpcClient, type CodexRpcNotification } from "@codex-spark/codex-rpc";
 import type {
@@ -18,6 +21,8 @@ const HOST = "127.0.0.1";
 const CODEX_WS = process.env.CODEX_WS ?? "ws://127.0.0.1:4500";
 const DEFAULT_MODEL = process.env.CODEX_MODEL ?? "gpt-5.3-codex-spark";
 const BROKER_VERSION = typeof __BROKER_VERSION__ === "string" ? __BROKER_VERSION__ : "dev";
+const SETTINGS_PATH = process.env.CODEX_SPARK_SETTINGS_PATH
+  ?? path.join(os.homedir(), ".codex-spark", "broker-settings.json");
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -25,7 +30,7 @@ const allowedOrigins = [
   "tauri://localhost"
 ];
 
-const settings: BrokerSettings = {
+const defaultSettings: BrokerSettings = {
   defaultModel: DEFAULT_MODEL,
   actionModels: {
     summarize: "auto",
@@ -36,6 +41,8 @@ const settings: BrokerSettings = {
   allowedOrigins: ["chrome-extension://*", ...allowedOrigins],
   maxPageTextChars: 60000
 };
+
+let settings: BrokerSettings = await loadSettings();
 
 const app = Fastify({
   logger: true
@@ -111,23 +118,24 @@ app.get("/settings", async () => {
   return settings;
 });
 
-app.patch<{ Body: Partial<BrokerSettings> }>("/settings", async (request) => {
-  if (typeof request.body.defaultModel === "string" && request.body.defaultModel.trim()) {
-    settings.defaultModel = request.body.defaultModel.trim();
-  }
-
-  if (request.body.actionModels && typeof request.body.actionModels === "object") {
-    for (const action of ["summarize", "translate", "analyze", "document"] satisfies BrowserAction[]) {
-      const model = request.body.actionModels[action];
-
-      if (typeof model === "string" && model.trim()) {
-        settings.actionModels[action] = model.trim();
-      }
+app.patch<{ Body: Partial<BrokerSettings> }>("/settings", async (request, reply) => {
+  const nextSettings = normalizeSettings({
+    ...settings,
+    ...request.body,
+    actionModels: {
+      ...settings.actionModels,
+      ...(request.body.actionModels ?? {})
     }
-  }
+  });
 
-  if (typeof request.body.maxPageTextChars === "number" && request.body.maxPageTextChars > 1000) {
-    settings.maxPageTextChars = Math.min(request.body.maxPageTextChars, 160000);
+  try {
+    await saveSettings(nextSettings);
+    settings = nextSettings;
+  } catch (error) {
+    reply.code(500);
+    return {
+      error: `Broker 설정 저장 실패: ${getErrorMessage(error)}`
+    };
   }
 
   return settings;
@@ -184,7 +192,74 @@ await app.listen({
 });
 
 function isAllowedOrigin(origin: string) {
-  return origin.startsWith("chrome-extension://") || allowedOrigins.includes(origin);
+  return settings.allowedOrigins.some((allowedOrigin) => {
+    if (allowedOrigin.endsWith("*")) {
+      return origin.startsWith(allowedOrigin.slice(0, -1));
+    }
+
+    return origin === allowedOrigin;
+  });
+}
+
+async function loadSettings() {
+  try {
+    const raw = await readFile(SETTINGS_PATH, "utf8");
+    return normalizeSettings(JSON.parse(raw) as Partial<BrokerSettings>);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(`Broker settings load failed: ${getErrorMessage(error)}`);
+    }
+
+    return defaultSettings;
+  }
+}
+
+async function saveSettings(nextSettings: BrokerSettings) {
+  await mkdir(path.dirname(SETTINGS_PATH), { recursive: true });
+  await writeFile(SETTINGS_PATH, `${JSON.stringify(nextSettings, null, 2)}\n`, "utf8");
+}
+
+function normalizeSettings(value: Partial<BrokerSettings>): BrokerSettings {
+  return {
+    defaultModel: normalizeNonEmptyString(value.defaultModel) ?? defaultSettings.defaultModel,
+    actionModels: normalizeActionModels(value.actionModels),
+    allowedOrigins: normalizeAllowedOrigins(value.allowedOrigins),
+    maxPageTextChars: normalizeMaxPageTextChars(value.maxPageTextChars)
+  };
+}
+
+function normalizeActionModels(value: Partial<Record<BrowserAction, string>> | undefined) {
+  const actionModels = { ...defaultSettings.actionModels };
+
+  for (const action of ["summarize", "translate", "analyze", "document"] satisfies BrowserAction[]) {
+    const model = normalizeNonEmptyString(value?.[action]);
+
+    if (model) {
+      actionModels[action] = model;
+    }
+  }
+
+  return actionModels;
+}
+
+function normalizeAllowedOrigins(value: string[] | undefined) {
+  const origins = Array.isArray(value)
+    ? value.map((origin) => normalizeNonEmptyString(origin)).filter((origin): origin is string => Boolean(origin))
+    : defaultSettings.allowedOrigins;
+
+  return Array.from(new Set(["chrome-extension://*", ...origins]));
+}
+
+function normalizeMaxPageTextChars(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultSettings.maxPageTextChars;
+  }
+
+  return Math.min(Math.max(Math.floor(value), 1000), 160000);
+}
+
+function normalizeNonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 async function streamBrowserAction(

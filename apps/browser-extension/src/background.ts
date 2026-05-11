@@ -31,10 +31,31 @@ async function captureActiveTab(): Promise<CaptureResponse> {
     };
   }
 
+  const existingResponse = await sendCaptureMessage(tab.id).catch((error: unknown) => {
+    if (isMissingContentScriptError(error)) {
+      return null;
+    }
+
+    throw error;
+  });
+
+  if (existingResponse) {
+    return existingResponse;
+  }
+
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: ["assets/content-script.js"]
   });
 
-  return chrome.tabs.sendMessage(tab.id, { type: "CAPTURE_PAGE" });
+  return sendCaptureMessage(tab.id);
+}
+
+function sendCaptureMessage(tabId: number) {
+  return chrome.tabs.sendMessage(tabId, { type: "CAPTURE_PAGE" }) as Promise<CaptureResponse>;
+}
+
+function isMissingContentScriptError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /receiving end does not exist|could not establish connection/i.test(message);
 }

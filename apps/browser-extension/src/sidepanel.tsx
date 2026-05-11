@@ -20,7 +20,9 @@ import "./sidepanel.css";
 
 const brokerUrl = "http://127.0.0.1:17333";
 const promptStorageKey = "codex-spark.promptTemplates.v1";
+const promptBackupStorageKey = "codex-spark.promptTemplates.lastBackup.v1";
 const themeStorageKey = "codex-spark.theme.v1";
+const brokerSettingsStorageKey = "codex-spark.brokerSettings.v1";
 
 type ModelHealth = {
   name: string;
@@ -112,7 +114,9 @@ function SidePanel() {
   const [documentFormat, setDocumentFormat] = useState("markdown");
   const [copied, setCopied] = useState(false);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplates>(() => readPromptTemplates());
-  const [brokerSettings, setBrokerSettings] = useState<BrokerSettings | null>(null);
+  const [promptBackupAvailable, setPromptBackupAvailable] = useState(() => hasPromptTemplateBackup());
+  const [promptResetNotice, setPromptResetNotice] = useState(false);
+  const [brokerSettings, setBrokerSettings] = useState<BrokerSettings | null>(() => readCachedBrokerSettings());
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [healthChecking, setHealthChecking] = useState(false);
@@ -219,20 +223,21 @@ function SidePanel() {
       ]);
 
       if (settingsResponse.ok) {
-        const settings = await settingsResponse.json();
-        setBrokerSettings(normalizeBrokerSettings(settings));
+        const settings = normalizeBrokerSettings(await settingsResponse.json());
+        setBrokerSettings(settings);
+        writeCachedBrokerSettings(settings);
       }
 
       if (modelsResponse.ok) {
         setModelOptions(extractModelOptions(await modelsResponse.json()));
       }
     } catch {
-      setBrokerSettings(null);
       setModelOptions([]);
     }
   }
 
   async function patchBrokerSettings(nextSettings: BrokerSettings) {
+    const previousSettings = brokerSettings;
     setBrokerSettings(nextSettings);
     setSettingsSaving(true);
 
@@ -252,9 +257,12 @@ function SidePanel() {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
 
-      setBrokerSettings(normalizeBrokerSettings(await response.json()));
+      const settings = normalizeBrokerSettings(await response.json());
+      setBrokerSettings(settings);
+      writeCachedBrokerSettings(settings);
       await refreshHealth();
     } catch (error) {
+      setBrokerSettings(previousSettings);
       const message = error instanceof Error ? error.message : String(error);
       setLastError({
         code: classifyErrorCode(error),
@@ -303,6 +311,7 @@ function SidePanel() {
       }
 
       setStatus("Broker에 분석 요청을 보내는 중입니다.");
+      await refreshHealth();
 
       const response = await fetch(`${brokerUrl}/browser/${action}/stream`, {
         method: "POST",
@@ -330,6 +339,7 @@ function SidePanel() {
       }
 
       await readSse(response.body);
+      await refreshHealth();
       setStatus("완료");
     } catch (error) {
       const message = error instanceof Error ? error.message : "요청 중 오류가 발생했습니다.";
@@ -419,7 +429,27 @@ function SidePanel() {
   }
 
   function resetPromptTemplates() {
+    if (!arePromptTemplatesEqual(promptTemplates, defaultPromptTemplates)) {
+      writePromptTemplateBackup(promptTemplates);
+      setPromptBackupAvailable(true);
+    }
+
     setPromptTemplates(defaultPromptTemplates);
+    setPromptResetNotice(true);
+  }
+
+  function restorePromptTemplates() {
+    const backup = readPromptTemplateBackup();
+
+    if (!backup) {
+      setPromptBackupAvailable(false);
+      setPromptResetNotice(false);
+      return;
+    }
+
+    setPromptTemplates(backup);
+    setPromptBackupAvailable(true);
+    setPromptResetNotice(false);
   }
 
   function customInstructionFor(action: BrowserAction) {
@@ -632,15 +662,34 @@ function SidePanel() {
             </div>
           </div>
 
-          <div className="settingsHeader">
+          <div className="settingsHeader promptSettingsHeader">
             <div>
               <strong>프롬프트 설정</strong>
               <span>기본값은 현재 만족한 출력 기준과 동일합니다. 수정 시에만 Broker로 override를 보냅니다.</span>
             </div>
-            <button onClick={resetPromptTemplates} type="button">
-              <RotateCcw size={14} /> 기본값
-            </button>
+            <div className="promptActions">
+              {promptBackupAvailable ? (
+                <button onClick={restorePromptTemplates} type="button">
+                  최근 프롬프트 복구
+                </button>
+              ) : null}
+              <button onClick={resetPromptTemplates} type="button">
+                <RotateCcw size={14} /> 기본 프롬프트로 복원
+              </button>
+            </div>
           </div>
+
+          {promptResetNotice ? (
+            <div className="promptUndo" role="status">
+              <span>기본 프롬프트로 복원했습니다.</span>
+              <button onClick={restorePromptTemplates} type="button">
+                되돌리기
+              </button>
+              <button aria-label="알림 닫기" onClick={() => setPromptResetNotice(false)} type="button">
+                닫기
+              </button>
+            </div>
+          ) : null}
 
           <div className="promptList">
             {actions.map((action) => (
@@ -735,6 +784,51 @@ function readPromptTemplates(): PromptTemplates {
   } catch {
     return defaultPromptTemplates;
   }
+}
+
+function readPromptTemplateBackup(): PromptTemplates | null {
+  try {
+    const stored = localStorage.getItem(promptBackupStorageKey);
+
+    return stored ? normalizePromptTemplates(JSON.parse(stored) as Partial<PromptTemplates>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePromptTemplateBackup(templates: PromptTemplates) {
+  localStorage.setItem(promptBackupStorageKey, JSON.stringify(templates));
+}
+
+function hasPromptTemplateBackup() {
+  return Boolean(readPromptTemplateBackup());
+}
+
+function normalizePromptTemplates(value: Partial<PromptTemplates>): PromptTemplates {
+  return {
+    summarize: typeof value.summarize === "string" ? value.summarize : defaultPromptTemplates.summarize,
+    translate: typeof value.translate === "string" ? value.translate : defaultPromptTemplates.translate,
+    analyze: typeof value.analyze === "string" ? value.analyze : defaultPromptTemplates.analyze,
+    document: typeof value.document === "string" ? value.document : defaultPromptTemplates.document
+  };
+}
+
+function arePromptTemplatesEqual(left: PromptTemplates, right: PromptTemplates) {
+  return actions.every((action) => left[action.id] === right[action.id]);
+}
+
+function readCachedBrokerSettings(): BrokerSettings | null {
+  try {
+    const stored = localStorage.getItem(brokerSettingsStorageKey);
+
+    return stored ? normalizeBrokerSettings(JSON.parse(stored) as Partial<BrokerSettings>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedBrokerSettings(settings: BrokerSettings) {
+  localStorage.setItem(brokerSettingsStorageKey, JSON.stringify(settings));
 }
 
 function defaultBrokerSettings(): BrokerSettings {
