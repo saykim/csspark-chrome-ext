@@ -62,6 +62,13 @@ export type BrowserActionStreamRequest = {
   };
 };
 
+export type BrowserFollowupStreamRequest = {
+  threadId: string;
+  prompt: string;
+  model?: string;
+  source: "chrome-extension";
+};
+
 export type AssistantEvent =
   | {
       type: "thread";

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Codex Spark Browser Assistant",
   "description": "현재 웹페이지를 Codex Spark로 요약, 번역, 의미 분석, 문서화합니다.",
-  "version": "0.4.7",
+  "version": "0.5.0",
   "permissions": ["activeTab", "scripting", "sidePanel", "storage", "tabs"],
   "host_permissions": ["http://127.0.0.1:17333/*", "https://*/*", "http://*/*"],
   "background": {

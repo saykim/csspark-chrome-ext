@@ -2,12 +2,13 @@ import Fastify, { type FastifyReply } from "fastify";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { buildBrowserPrompt, normalizeBrowserPage } from "@codex-spark/adapters";
+import { buildBrowserPrompt, buildFollowupPrompt, normalizeBrowserPage } from "@codex-spark/adapters";
 import { CodexRpcClient, type CodexRpcNotification } from "@codex-spark/codex-rpc";
 import type {
   BrokerSettings,
   BrowserAction,
   BrowserActionStreamRequest,
+  BrowserFollowupStreamRequest,
   DocumentFormat,
   RunStreamRequest,
   TranslationTarget,
@@ -163,6 +164,10 @@ app.post<{ Body: BrowserActionStreamRequest }>("/browser/document/stream", async
   return streamBrowserAction("document", request.body, reply, request.headers.origin);
 });
 
+app.post<{ Body: BrowserFollowupStreamRequest }>("/browser/followup/stream", async (request, reply) => {
+  return streamFollowup(request.body, reply, request.headers.origin);
+});
+
 app.post<{ Body: RunStreamRequest }>("/runs/stream", async (request, reply) => {
   const body = request.body;
 
@@ -314,6 +319,55 @@ async function streamBrowserAction(
   }
 }
 
+async function streamFollowup(
+  body: BrowserFollowupStreamRequest,
+  reply: FastifyReply,
+  origin: string | undefined
+) {
+  if (!body || body.source !== "chrome-extension") {
+    reply.code(400);
+    return { error: "source must be chrome-extension" };
+  }
+
+  if (typeof body.threadId !== "string" || !body.threadId.trim()) {
+    reply.code(400);
+    return { error: "threadId is required" };
+  }
+
+  if (typeof body.prompt !== "string" || !body.prompt.trim()) {
+    reply.code(400);
+    return { error: "prompt is required" };
+  }
+
+  const prompt = buildFollowupPrompt(body.prompt);
+  const model = await pickAvailableModel(normalizeModelSelection(body.model) ?? settings.defaultModel);
+
+  startSse(reply, origin);
+  writeSse(reply, "status", { label: "이전 대화 맥락 불러오는 중" });
+  writeSse(reply, "status", { label: `${model} 연결 시도 중` });
+
+  try {
+    await rpc.runBrowserPrompt({
+      prompt,
+      model,
+      threadId: body.threadId,
+      cwd: process.cwd(),
+      serviceName: "codex-spark-browser",
+      onNotification: (notification) => {
+        forwardCodexNotification(reply, notification);
+      }
+    });
+
+    writeSse(reply, "done", { ok: true, model });
+  } catch (error) {
+    writeSse(reply, "error", {
+      error: getErrorMessage(error)
+    });
+  } finally {
+    reply.raw.end();
+  }
+}
+
 function validateBrowserRequest(action: BrowserAction, body: BrowserActionStreamRequest) {
   if (!body || body.action !== action) {
     return "action does not match endpoint";
@@ -399,6 +453,10 @@ async function resolveModel(action: BrowserAction, requestModel?: string) {
   const actionModel = settings.actionModels[action];
   const preferred = normalizeModelSelection(requestModel) ?? normalizeModelSelection(actionModel) ?? settings.defaultModel;
 
+  return pickAvailableModel(preferred);
+}
+
+async function pickAvailableModel(preferred: string) {
   try {
     const models = await rpc.listModels();
     const preferredModel = findModel(models, preferred);

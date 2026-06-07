@@ -11,6 +11,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Send,
   Settings,
   Sparkles,
   Sun
@@ -50,6 +51,12 @@ type ModelOption = {
 type PanelTab = "work" | "details" | "settings";
 type ThemeMode = "light" | "dark";
 type PromptTemplates = Record<BrowserAction, string>;
+type Exchange = {
+  id: string;
+  kind: BrowserAction | "followup";
+  question: string;
+  content: string;
+};
 
 const actions: Array<{
   id: BrowserAction;
@@ -107,7 +114,11 @@ function SidePanel() {
   const [activeTab, setActiveTab] = useState<PanelTab>("work");
   const [theme, setTheme] = useState<ThemeMode>(() => readTheme());
   const [page, setPage] = useState<CapturedPage | null>(null);
-  const [result, setResult] = useState("");
+  const [exchanges, setExchanges] = useState<Exchange[]>([]);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [followupInput, setFollowupInput] = useState("");
+  const [followupRunning, setFollowupRunning] = useState(false);
   const [status, setStatus] = useState("현재 탭을 읽고 작업을 선택하세요.");
   const [runningAction, setRunningAction] = useState<BrowserAction | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("ko");
@@ -155,6 +166,9 @@ function SidePanel() {
 
     return `${source} · ${count.toLocaleString()}자`;
   }, [page]);
+
+  const transcript = useMemo(() => buildTranscript(exchanges).trim(), [exchanges]);
+  const streaming = Boolean(runningAction) || followupRunning;
 
   async function capturePage() {
     setStatus("현재 탭을 읽는 중입니다.");
@@ -295,7 +309,10 @@ function SidePanel() {
 
   async function runAction(action: BrowserAction) {
     setRunningAction(action);
-    setResult("");
+    setExchanges([]);
+    setThreadId(null);
+    setActiveModel(null);
+    setFollowupInput("");
     setActiveTab("work");
 
     try {
@@ -312,6 +329,8 @@ function SidePanel() {
 
       setStatus("Broker에 분석 요청을 보내는 중입니다.");
       await refreshHealth();
+
+      appendExchange({ id: createExchangeId(), kind: action, question: "", content: "" });
 
       const response = await fetch(`${brokerUrl}/browser/${action}/stream`, {
         method: "POST",
@@ -338,36 +357,102 @@ function SidePanel() {
         throw new Error("스트리밍 응답을 열 수 없습니다.");
       }
 
-      await readSse(response.body);
+      await consumeStream(response.body);
       await refreshHealth();
       setStatus("완료");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "요청 중 오류가 발생했습니다.";
-      setStatus(message);
-
-      if (isNetworkError(error)) {
-        setBrokerHealth({
-          status: "error",
-          detail: "Broker에 연결할 수 없습니다."
-        });
-        setModelHealth({
-          name: modelHealth.name,
-          status: "error",
-          detail: "Broker에 연결할 수 없습니다."
-        });
-      }
-
-      setLastError({
-        code: classifyErrorCode(error),
-        message,
-        at: new Date().toLocaleTimeString()
-      });
+      handleStreamError(error);
     } finally {
       setRunningAction(null);
     }
   }
 
-  async function readSse(body: ReadableStream<Uint8Array>) {
+  async function runFollowup() {
+    const question = followupInput.trim();
+
+    if (!question || !threadId || followupRunning || runningAction) {
+      return;
+    }
+
+    setFollowupRunning(true);
+    setStatus("이전 대화에 이어서 질문하는 중입니다.");
+    appendExchange({ id: createExchangeId(), kind: "followup", question, content: "" });
+
+    try {
+      const response = await fetch(`${brokerUrl}/browser/followup/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          threadId,
+          prompt: question,
+          model: activeModel ?? undefined,
+          source: "chrome-extension"
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      if (!response.body) {
+        throw new Error("스트리밍 응답을 열 수 없습니다.");
+      }
+
+      await consumeStream(response.body);
+      setFollowupInput("");
+      setStatus("완료");
+    } catch (error) {
+      handleStreamError(error);
+    } finally {
+      setFollowupRunning(false);
+    }
+  }
+
+  function appendExchange(exchange: Exchange) {
+    setExchanges((current) => [...current, exchange]);
+  }
+
+  function appendToLastExchange(chunk: string, separator = "") {
+    setExchanges((current) => {
+      if (current.length === 0) {
+        return current;
+      }
+
+      const next = [...current];
+      const last = next[next.length - 1];
+      const prefix = last.content && separator ? separator : "";
+      next[next.length - 1] = { ...last, content: `${last.content}${prefix}${chunk}` };
+      return next;
+    });
+  }
+
+  function handleStreamError(error: unknown) {
+    const message = error instanceof Error ? error.message : "요청 중 오류가 발생했습니다.";
+    setStatus(message);
+    appendToLastExchange(`⚠️ ${message}`, "\n\n");
+
+    if (isNetworkError(error)) {
+      setBrokerHealth({
+        status: "error",
+        detail: "Broker에 연결할 수 없습니다."
+      });
+      setModelHealth({
+        name: modelHealth.name,
+        status: "error",
+        detail: "Broker에 연결할 수 없습니다."
+      });
+    }
+
+    setLastError({
+      code: classifyErrorCode(error),
+      message,
+      at: new Date().toLocaleTimeString()
+    });
+  }
+
+  async function consumeStream(body: ReadableStream<Uint8Array>) {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -392,16 +477,22 @@ function SidePanel() {
 
         const payload = JSON.parse(dataLine.slice(6));
 
+        if (typeof payload.threadId === "string") {
+          setThreadId(payload.threadId);
+        }
+
+        if (typeof payload.model === "string") {
+          setActiveModel(payload.model);
+        }
+
         if (typeof payload.label === "string") {
           setStatus(payload.label);
         }
 
-        if (typeof payload.text === "string") {
-          setResult((current) => `${current}${current ? "\n\n" : ""}${payload.text}`);
-        }
-
         if (typeof payload.delta === "string") {
-          setResult((current) => `${current}${payload.delta}`);
+          appendToLastExchange(payload.delta);
+        } else if (typeof payload.text === "string") {
+          appendToLastExchange(payload.text, "\n\n");
         }
 
         if (typeof payload.error === "string") {
@@ -412,11 +503,13 @@ function SidePanel() {
   }
 
   async function copyResult() {
-    if (!result.trim()) {
+    const transcript = buildTranscript(exchanges);
+
+    if (!transcript.trim()) {
       return;
     }
 
-    await navigator.clipboard.writeText(result);
+    await navigator.clipboard.writeText(transcript);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1300);
   }
@@ -544,12 +637,55 @@ function SidePanel() {
           <section className="resultShell">
             <div className="resultToolbar">
               <strong>산출물</strong>
-              <button aria-label="산출물 복사" disabled={!result.trim()} onClick={() => void copyResult()} title="산출물 복사" type="button">
+              <button aria-label="산출물 복사" disabled={!transcript} onClick={() => void copyResult()} title="산출물 복사" type="button">
                 <Copy size={15} />
                 {copied ? "복사됨" : "Copy"}
               </button>
             </div>
-            <article className="result">{result || "결과가 여기에 표시됩니다."}</article>
+            <article className="result">
+              {exchanges.length === 0 ? (
+                <span className="resultPlaceholder">결과가 여기에 표시됩니다.</span>
+              ) : (
+                <div className="conversation">
+                  {exchanges.map((exchange, index) => (
+                    <div className="exchange" key={exchange.id}>
+                      <div className="exchangeHeading">
+                        <span className="exchangeRole">
+                          {exchange.kind === "followup" ? "질문" : exchangeHeading(exchange.kind)}
+                        </span>
+                        {exchange.kind === "followup" ? <span className="exchangeQuestion">{exchange.question}</span> : null}
+                      </div>
+                      <div className="exchangeBody">
+                        {exchange.content || (streaming && index === exchanges.length - 1 ? "…" : "")}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+            <div className="composer">
+              <textarea
+                placeholder={threadId ? "이 페이지에 대해 이어서 질문하기 (Enter 전송 · Shift+Enter 줄바꿈)" : "먼저 요약·번역·분석·문서화를 실행하면 이어서 질문할 수 있습니다."}
+                value={followupInput}
+                disabled={!threadId || followupRunning || Boolean(runningAction)}
+                onChange={(event) => setFollowupInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void runFollowup();
+                  }
+                }}
+                rows={2}
+              />
+              <button
+                aria-label="후속 질문 보내기"
+                disabled={!threadId || followupRunning || Boolean(runningAction) || !followupInput.trim()}
+                onClick={() => void runFollowup()}
+                type="button"
+              >
+                {followupRunning ? <Loader2 className="spin" size={16} /> : <Send size={16} />}
+              </button>
+            </div>
           </section>
         </>
       ) : null}
@@ -916,6 +1052,23 @@ function languageLabel(language: string) {
     ja: "일본어",
     zh: "중국어"
   }[language] ?? "한국어";
+}
+
+function createExchangeId() {
+  return `ex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function exchangeHeading(kind: Exchange["kind"]) {
+  return actions.find((action) => action.id === kind)?.label ?? "결과";
+}
+
+function buildTranscript(exchanges: Exchange[]) {
+  return exchanges
+    .map((exchange) => {
+      const heading = exchange.kind === "followup" ? `질문: ${exchange.question}` : exchangeHeading(exchange.kind);
+      return `## ${heading}\n\n${exchange.content}`.trim();
+    })
+    .join("\n\n");
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

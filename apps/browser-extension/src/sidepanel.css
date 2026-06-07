@@ -447,6 +447,94 @@ button:hover:not(:disabled) {
   white-space: pre-wrap;
 }
 
+.resultPlaceholder {
+  color: var(--muted);
+}
+
+.conversation {
+  display: grid;
+  gap: 14px;
+}
+
+.exchange {
+  display: grid;
+  gap: 6px;
+}
+
+.exchange + .exchange {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.exchangeHeading {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.exchangeRole {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.exchangeQuestion {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.exchangeBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 9px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.composer textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.composer textarea:disabled {
+  opacity: 0.6;
+}
+
+.composer button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+}
+
+.composer button:disabled {
+  opacity: 0.5;
+}
+
 .stackPanel {
   display: grid;
   gap: 10px;

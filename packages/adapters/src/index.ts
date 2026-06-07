@@ -30,6 +30,23 @@ export type BrowserPromptOptions = {
   customInstruction?: string;
 };
 
+const SYSTEM_GUIDE = [
+  "너는 한국어로 답하는 정확성 우선 어시스턴트야.",
+  "원문에 없는 사실을 지어내지 말고, 불확실하면 불확실하다고 표시해.",
+  "추측과 사실은 구분해서 보여줘."
+].join(" ");
+
+export function buildFollowupPrompt(question: string) {
+  const trimmed = cleanText(question).slice(0, 5000);
+
+  return [
+    SYSTEM_GUIDE,
+    "이 대화의 앞선 분석 대상 페이지와 직전 답변 맥락을 유지한 채 이어지는 질문에 답해줘.",
+    "맥락에서 확인되지 않는 내용은 모른다고 말하고 임의로 지어내지 마.",
+    `질문: ${trimmed}`
+  ].join("\n\n");
+}
+
 export function buildBrowserPrompt(action: BrowserAction, page: NormalizedBrowserPage, options: BrowserPromptOptions = {}) {
   const header = [
     `URL: ${page.url}`,
@@ -43,7 +60,7 @@ export function buildBrowserPrompt(action: BrowserAction, page: NormalizedBrowse
 
   const instruction = instructionFor(action, options);
 
-  return `${instruction}\n\n${header}\n\n--- CONTENT ---\n${page.effectiveText}`;
+  return `${SYSTEM_GUIDE}\n\n${instruction}\n\n${header}\n\n--- CONTENT ---\n${page.effectiveText}`;
 }
 
 function cleanText(value: string) {
@@ -51,12 +68,17 @@ function cleanText(value: string) {
 }
 
 function instructionFor(action: BrowserAction, options: BrowserPromptOptions) {
+  const base = baseInstructionFor(action, options);
   const customInstruction = cleanText(options.customInstruction ?? "").slice(0, 5000);
 
   if (customInstruction) {
-    return customInstruction;
+    return `${base}\n\n추가 사용자 요청(우선 반영): ${customInstruction}`;
   }
 
+  return base;
+}
+
+function baseInstructionFor(action: BrowserAction, options: BrowserPromptOptions) {
   if (action === "summarize") {
     return [
       "다음 웹페이지를 요약해줘.",

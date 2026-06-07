@@ -34401,6 +34401,20 @@ function normalizeBrowserPage(page, maxChars = DEFAULT_MAX_CHARS) {
     truncated: sourceText.length > maxChars
   };
 }
+var SYSTEM_GUIDE = [
+  "\uB108\uB294 \uD55C\uAD6D\uC5B4\uB85C \uB2F5\uD558\uB294 \uC815\uD655\uC131 \uC6B0\uC120 \uC5B4\uC2DC\uC2A4\uD134\uD2B8\uC57C.",
+  "\uC6D0\uBB38\uC5D0 \uC5C6\uB294 \uC0AC\uC2E4\uC744 \uC9C0\uC5B4\uB0B4\uC9C0 \uB9D0\uACE0, \uBD88\uD655\uC2E4\uD558\uBA74 \uBD88\uD655\uC2E4\uD558\uB2E4\uACE0 \uD45C\uC2DC\uD574.",
+  "\uCD94\uCE21\uACFC \uC0AC\uC2E4\uC740 \uAD6C\uBD84\uD574\uC11C \uBCF4\uC5EC\uC918."
+].join(" ");
+function buildFollowupPrompt(question) {
+  const trimmed = cleanText(question).slice(0, 5e3);
+  return [
+    SYSTEM_GUIDE,
+    "\uC774 \uB300\uD654\uC758 \uC55E\uC120 \uBD84\uC11D \uB300\uC0C1 \uD398\uC774\uC9C0\uC640 \uC9C1\uC804 \uB2F5\uBCC0 \uB9E5\uB77D\uC744 \uC720\uC9C0\uD55C \uCC44 \uC774\uC5B4\uC9C0\uB294 \uC9C8\uBB38\uC5D0 \uB2F5\uD574\uC918.",
+    "\uB9E5\uB77D\uC5D0\uC11C \uD655\uC778\uB418\uC9C0 \uC54A\uB294 \uB0B4\uC6A9\uC740 \uBAA8\uB978\uB2E4\uACE0 \uB9D0\uD558\uACE0 \uC784\uC758\uB85C \uC9C0\uC5B4\uB0B4\uC9C0 \uB9C8.",
+    `\uC9C8\uBB38: ${trimmed}`
+  ].join("\n\n");
+}
 function buildBrowserPrompt(action, page, options = {}) {
   const header = [
     `URL: ${page.url}`,
@@ -34410,7 +34424,9 @@ function buildBrowserPrompt(action, page, options = {}) {
     page.truncated ? "Note: content was truncated before analysis." : void 0
   ].filter(Boolean).join("\n");
   const instruction = instructionFor(action, options);
-  return `${instruction}
+  return `${SYSTEM_GUIDE}
+
+${instruction}
 
 ${header}
 
@@ -34421,10 +34437,16 @@ function cleanText(value) {
   return value.replace(/\s+/g, " ").trim();
 }
 function instructionFor(action, options) {
+  const base = baseInstructionFor(action, options);
   const customInstruction = cleanText(options.customInstruction ?? "").slice(0, 5e3);
   if (customInstruction) {
-    return customInstruction;
+    return `${base}
+
+\uCD94\uAC00 \uC0AC\uC6A9\uC790 \uC694\uCCAD(\uC6B0\uC120 \uBC18\uC601): ${customInstruction}`;
   }
+  return base;
+}
+function baseInstructionFor(action, options) {
   if (action === "summarize") {
     return [
       "\uB2E4\uC74C \uC6F9\uD398\uC774\uC9C0\uB97C \uC694\uC57D\uD574\uC918.",
@@ -34820,7 +34842,7 @@ var PORT = Number(process.env.PORT ?? 17333);
 var HOST = "127.0.0.1";
 var CODEX_WS = process.env.CODEX_WS ?? "ws://127.0.0.1:4500";
 var DEFAULT_MODEL = process.env.CODEX_MODEL ?? "gpt-5.3-codex-spark";
-var BROKER_VERSION = true ? "0.4.5" : "dev";
+var BROKER_VERSION = true ? "0.5.0" : "dev";
 var SETTINGS_PATH = process.env.CODEX_SPARK_SETTINGS_PATH ?? path.join(os.homedir(), ".codex-spark", "broker-settings.json");
 var allowedOrigins = [
   "http://localhost:5173",
@@ -34931,6 +34953,9 @@ app.post("/browser/analyze/stream", async (request, reply) => {
 });
 app.post("/browser/document/stream", async (request, reply) => {
   return streamBrowserAction("document", request.body, reply, request.headers.origin);
+});
+app.post("/browser/followup/stream", async (request, reply) => {
+  return streamFollowup(request.body, reply, request.headers.origin);
 });
 app.post("/runs/stream", async (request, reply) => {
   const body = request.body;
@@ -35050,6 +35075,44 @@ async function streamBrowserAction(action, body, reply, origin) {
     reply.raw.end();
   }
 }
+async function streamFollowup(body, reply, origin) {
+  if (!body || body.source !== "chrome-extension") {
+    reply.code(400);
+    return { error: "source must be chrome-extension" };
+  }
+  if (typeof body.threadId !== "string" || !body.threadId.trim()) {
+    reply.code(400);
+    return { error: "threadId is required" };
+  }
+  if (typeof body.prompt !== "string" || !body.prompt.trim()) {
+    reply.code(400);
+    return { error: "prompt is required" };
+  }
+  const prompt = buildFollowupPrompt(body.prompt);
+  const model = await pickAvailableModel(normalizeModelSelection(body.model) ?? settings.defaultModel);
+  startSse(reply, origin);
+  writeSse(reply, "status", { label: "\uC774\uC804 \uB300\uD654 \uB9E5\uB77D \uBD88\uB7EC\uC624\uB294 \uC911" });
+  writeSse(reply, "status", { label: `${model} \uC5F0\uACB0 \uC2DC\uB3C4 \uC911` });
+  try {
+    await rpc.runBrowserPrompt({
+      prompt,
+      model,
+      threadId: body.threadId,
+      cwd: process.cwd(),
+      serviceName: "codex-spark-browser",
+      onNotification: (notification) => {
+        forwardCodexNotification(reply, notification);
+      }
+    });
+    writeSse(reply, "done", { ok: true, model });
+  } catch (error) {
+    writeSse(reply, "error", {
+      error: getErrorMessage(error)
+    });
+  } finally {
+    reply.raw.end();
+  }
+}
 function validateBrowserRequest(action, body) {
   if (!body || body.action !== action) {
     return "action does not match endpoint";
@@ -35119,6 +35182,9 @@ async function getModelHealth() {
 async function resolveModel(action, requestModel) {
   const actionModel = settings.actionModels[action];
   const preferred = normalizeModelSelection(requestModel) ?? normalizeModelSelection(actionModel) ?? settings.defaultModel;
+  return pickAvailableModel(preferred);
+}
+async function pickAvailableModel(preferred) {
   try {
     const models = await rpc.listModels();
     const preferredModel = findModel(models, preferred);
