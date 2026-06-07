@@ -13,6 +13,7 @@ import {
   Search,
   Send,
   Settings,
+  ShieldAlert,
   Sparkles,
   Sun
 } from "lucide-react";
@@ -142,6 +143,8 @@ function SidePanel() {
     detail: "Broker 상태 확인 전"
   });
   const [lastError, setLastError] = useState<{ code: string; message: string; at: string } | null>(null);
+  const [sensitiveOverride, setSensitiveOverride] = useState(false);
+  const [blockedAction, setBlockedAction] = useState<BrowserAction | null>(null);
 
   useEffect(() => {
     void refreshHealth();
@@ -180,6 +183,8 @@ function SidePanel() {
     }
 
     setPage(response.page);
+    setSensitiveOverride(false);
+    setBlockedAction(null);
     setStatus(response.page.isSensitive ? "민감 페이지로 감지되어 자동 분석을 막았습니다." : "페이지를 읽었습니다.");
     return response.page;
   }
@@ -307,7 +312,7 @@ function SidePanel() {
     });
   }
 
-  async function runAction(action: BrowserAction) {
+  async function runAction(action: BrowserAction, options: { force?: boolean } = {}) {
     setRunningAction(action);
     setExchanges([]);
     setThreadId(null);
@@ -322,11 +327,15 @@ function SidePanel() {
         return;
       }
 
-      if (activePage.isSensitive) {
+      const allowSensitive = options.force || sensitiveOverride;
+
+      if (activePage.isSensitive && !allowSensitive) {
+        setBlockedAction(action);
         setStatus("비밀번호, 결제, 로그인 페이지는 기본 정책상 분석하지 않습니다.");
         return;
       }
 
+      setBlockedAction(null);
       setStatus("Broker에 분석 요청을 보내는 중입니다.");
       await refreshHealth();
 
@@ -365,6 +374,17 @@ function SidePanel() {
     } finally {
       setRunningAction(null);
     }
+  }
+
+  function forceBlockedAction() {
+    if (!blockedAction || runningAction) {
+      return;
+    }
+
+    const action = blockedAction;
+    setSensitiveOverride(true);
+    setBlockedAction(null);
+    void runAction(action, { force: true });
   }
 
   async function runFollowup() {
@@ -633,6 +653,19 @@ function SidePanel() {
             <span className={`signal ${modelHealth.status}`} />
             {status}
           </section>
+
+          {blockedAction ? (
+            <section className="sensitiveNotice" role="alert">
+              <div className="sensitiveNoticeHeader">
+                <ShieldAlert size={15} />
+                <strong>민감 페이지로 감지됨</strong>
+              </div>
+              <p>비밀번호·결제·로그인 정보가 포함될 수 있어 자동 분석을 막았습니다. 직접 확인했고 안전하다면 그대로 진행할 수 있습니다.</p>
+              <button disabled={Boolean(runningAction)} onClick={forceBlockedAction} type="button">
+                그래도 {exchangeHeading(blockedAction)} 실행
+              </button>
+            </section>
+          ) : null}
 
           <section className="resultShell">
             <div className="resultToolbar">

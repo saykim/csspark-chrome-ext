@@ -402,6 +402,63 @@ button:hover:not(:disabled) {
   color: #f3b9ad;
 }
 
+.sensitiveNotice {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(214, 158, 46, 0.45);
+  border-radius: 13px;
+  background: rgba(214, 158, 46, 0.1);
+}
+
+.sensitiveNotice .sensitiveNoticeHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8a6420;
+}
+
+.sensitiveNotice strong {
+  font-size: 13px;
+}
+
+.sensitiveNotice p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sensitiveNotice button {
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 14px;
+  border: 1px solid rgba(214, 158, 46, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 255, 250, 0.92);
+  color: #8a6420;
+  cursor: pointer;
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sensitiveNotice button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.panel[data-theme="dark"] .sensitiveNotice {
+  background: rgba(214, 158, 46, 0.16);
+}
+
+.panel[data-theme="dark"] .sensitiveNotice .sensitiveNoticeHeader,
+.panel[data-theme="dark"] .sensitiveNotice button {
+  color: #ecca7e;
+}
+
 .resultShell {
   display: grid;
   overflow: hidden;

@@ -41,8 +41,31 @@ function cleanText(value: string) {
 
 function isSensitivePage() {
   const url = location.href.toLowerCase();
-  const hasPasswordField = Boolean(document.querySelector('input[type="password"]'));
-  const sensitiveUrl = /account|billing|checkout|payment|password|signin|login|auth/.test(url);
+  const sensitiveUrl = /\b(account|billing|checkout|payment|password|signin|login|auth)\b/.test(url);
 
-  return hasPasswordField || sensitiveUrl;
+  return hasVisiblePasswordField() || sensitiveUrl;
+}
+
+function hasVisiblePasswordField() {
+  const fields = document.querySelectorAll<HTMLInputElement>('input[type="password"]');
+
+  for (const field of fields) {
+    if (isElementVisible(field)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isElementVisible(element: HTMLElement) {
+  const style = window.getComputedStyle(element);
+
+  if (style.visibility === "hidden" || style.display === "none" || style.opacity === "0") {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  return rect.width > 0 && rect.height > 0;
 }
