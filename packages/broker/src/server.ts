@@ -293,6 +293,8 @@ async function streamBrowserAction(
     createdAt: new Date().toISOString()
   });
 
+  const cancellation = createClientCancellation(reply);
+
   startSse(reply, origin);
   writeSse(reply, "status", { label: "페이지 내용 정리 완료" });
   writeSse(reply, "status", { label: `${model} 연결 시도 중` });
@@ -304,6 +306,7 @@ async function streamBrowserAction(
       threadId: body.threadId,
       cwd: process.cwd(),
       serviceName: "codex-spark-browser",
+      signal: cancellation.signal,
       onNotification: (notification) => {
         forwardCodexNotification(reply, notification);
       }
@@ -311,11 +314,14 @@ async function streamBrowserAction(
 
     writeSse(reply, "done", { ok: true, requestId, truncated: page.truncated, model });
   } catch (error) {
-    writeSse(reply, "error", {
-      error: getErrorMessage(error)
-    });
+    if (!cancellation.aborted) {
+      writeSse(reply, "error", {
+        error: getErrorMessage(error)
+      });
+    }
   } finally {
-    reply.raw.end();
+    cancellation.dispose();
+    endReply(reply);
   }
 }
 
@@ -342,6 +348,8 @@ async function streamFollowup(
   const prompt = buildFollowupPrompt(body.prompt);
   const model = await pickAvailableModel(normalizeModelSelection(body.model) ?? settings.defaultModel);
 
+  const cancellation = createClientCancellation(reply);
+
   startSse(reply, origin);
   writeSse(reply, "status", { label: "이전 대화 맥락 불러오는 중" });
   writeSse(reply, "status", { label: `${model} 연결 시도 중` });
@@ -353,6 +361,7 @@ async function streamFollowup(
       threadId: body.threadId,
       cwd: process.cwd(),
       serviceName: "codex-spark-browser",
+      signal: cancellation.signal,
       onNotification: (notification) => {
         forwardCodexNotification(reply, notification);
       }
@@ -360,11 +369,14 @@ async function streamFollowup(
 
     writeSse(reply, "done", { ok: true, model });
   } catch (error) {
-    writeSse(reply, "error", {
-      error: getErrorMessage(error)
-    });
+    if (!cancellation.aborted) {
+      writeSse(reply, "error", {
+        error: getErrorMessage(error)
+      });
+    }
   } finally {
-    reply.raw.end();
+    cancellation.dispose();
+    endReply(reply);
   }
 }
 
@@ -398,6 +410,44 @@ function validateBrowserRequest(action: BrowserAction, body: BrowserActionStream
   }
 
   return null;
+}
+
+type ClientCancellation = {
+  signal: AbortSignal;
+  aborted: boolean;
+  dispose: () => void;
+};
+
+function createClientCancellation(reply: FastifyReply): ClientCancellation {
+  const controller = new AbortController();
+  const state = { aborted: false };
+
+  const onClose = () => {
+    // The client (Chrome extension) aborted the fetch before we finished the
+    // stream, so cancel the Codex turn instead of letting it run to completion.
+    if (!reply.raw.writableEnded) {
+      state.aborted = true;
+      controller.abort();
+    }
+  };
+
+  reply.raw.on("close", onClose);
+
+  return {
+    signal: controller.signal,
+    get aborted() {
+      return state.aborted;
+    },
+    dispose() {
+      reply.raw.off("close", onClose);
+    }
+  };
+}
+
+function endReply(reply: FastifyReply) {
+  if (!reply.raw.writableEnded) {
+    reply.raw.end();
+  }
 }
 
 function startSse(reply: FastifyReply, origin: string | undefined) {

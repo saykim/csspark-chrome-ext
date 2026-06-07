@@ -34512,6 +34512,12 @@ function languageLabel(language) {
 }
 
 // ../codex-rpc/src/index.ts
+var CodexAbortError = class extends Error {
+  constructor(message = "Codex turn was aborted by the client.") {
+    super(message);
+    this.name = "CodexAbortError";
+  }
+};
 var CodexRpcClient = class {
   constructor(config) {
     this.config = config;
@@ -34528,6 +34534,10 @@ var CodexRpcClient = class {
     });
   }
   async runBrowserPrompt(request) {
+    const { signal } = request;
+    if (signal?.aborted) {
+      throw new CodexAbortError();
+    }
     await this.withConnection(async (connection) => {
       let activeTurnId = "";
       let finishRun = null;
@@ -34539,6 +34549,16 @@ var CodexRpcClient = class {
       const timeout = setTimeout(() => {
         failRun?.(new Error("Codex turn timed out before completion."));
       }, this.config.turnTimeoutMs ?? 6e5);
+      const onAbort = () => {
+        failRun?.(new CodexAbortError());
+        connection.close();
+      };
+      if (signal) {
+        signal.addEventListener("abort", onAbort, { once: true });
+        if (signal.aborted) {
+          onAbort();
+        }
+      }
       connection.onClose = () => {
         failRun?.(new Error("Codex app-server connection closed before the turn completed."));
       };
@@ -34640,6 +34660,7 @@ var CodexRpcClient = class {
         await turnCompleted;
       } finally {
         clearTimeout(timeout);
+        signal?.removeEventListener("abort", onAbort);
       }
     });
   }
@@ -34842,7 +34863,7 @@ var PORT = Number(process.env.PORT ?? 17333);
 var HOST = "127.0.0.1";
 var CODEX_WS = process.env.CODEX_WS ?? "ws://127.0.0.1:4500";
 var DEFAULT_MODEL = process.env.CODEX_MODEL ?? "gpt-5.3-codex-spark";
-var BROKER_VERSION = true ? "0.5.0" : "dev";
+var BROKER_VERSION = true ? "0.6.0" : "dev";
 var SETTINGS_PATH = process.env.CODEX_SPARK_SETTINGS_PATH ?? path.join(os.homedir(), ".codex-spark", "broker-settings.json");
 var allowedOrigins = [
   "http://localhost:5173",
@@ -35052,6 +35073,7 @@ async function streamBrowserAction(action, body, reply, origin) {
     url: page.url,
     createdAt: (/* @__PURE__ */ new Date()).toISOString()
   });
+  const cancellation = createClientCancellation(reply);
   startSse(reply, origin);
   writeSse(reply, "status", { label: "\uD398\uC774\uC9C0 \uB0B4\uC6A9 \uC815\uB9AC \uC644\uB8CC" });
   writeSse(reply, "status", { label: `${model} \uC5F0\uACB0 \uC2DC\uB3C4 \uC911` });
@@ -35062,17 +35084,21 @@ async function streamBrowserAction(action, body, reply, origin) {
       threadId: body.threadId,
       cwd: process.cwd(),
       serviceName: "codex-spark-browser",
+      signal: cancellation.signal,
       onNotification: (notification) => {
         forwardCodexNotification(reply, notification);
       }
     });
     writeSse(reply, "done", { ok: true, requestId, truncated: page.truncated, model });
   } catch (error2) {
-    writeSse(reply, "error", {
-      error: getErrorMessage(error2)
-    });
+    if (!cancellation.aborted) {
+      writeSse(reply, "error", {
+        error: getErrorMessage(error2)
+      });
+    }
   } finally {
-    reply.raw.end();
+    cancellation.dispose();
+    endReply(reply);
   }
 }
 async function streamFollowup(body, reply, origin) {
@@ -35090,6 +35116,7 @@ async function streamFollowup(body, reply, origin) {
   }
   const prompt = buildFollowupPrompt(body.prompt);
   const model = await pickAvailableModel(normalizeModelSelection(body.model) ?? settings.defaultModel);
+  const cancellation = createClientCancellation(reply);
   startSse(reply, origin);
   writeSse(reply, "status", { label: "\uC774\uC804 \uB300\uD654 \uB9E5\uB77D \uBD88\uB7EC\uC624\uB294 \uC911" });
   writeSse(reply, "status", { label: `${model} \uC5F0\uACB0 \uC2DC\uB3C4 \uC911` });
@@ -35100,17 +35127,21 @@ async function streamFollowup(body, reply, origin) {
       threadId: body.threadId,
       cwd: process.cwd(),
       serviceName: "codex-spark-browser",
+      signal: cancellation.signal,
       onNotification: (notification) => {
         forwardCodexNotification(reply, notification);
       }
     });
     writeSse(reply, "done", { ok: true, model });
   } catch (error) {
-    writeSse(reply, "error", {
-      error: getErrorMessage(error)
-    });
+    if (!cancellation.aborted) {
+      writeSse(reply, "error", {
+        error: getErrorMessage(error)
+      });
+    }
   } finally {
-    reply.raw.end();
+    cancellation.dispose();
+    endReply(reply);
   }
 }
 function validateBrowserRequest(action, body) {
@@ -35136,6 +35167,31 @@ function validateBrowserRequest(action, body) {
     return "documentFormat must be markdown or html";
   }
   return null;
+}
+function createClientCancellation(reply) {
+  const controller = new AbortController();
+  const state = { aborted: false };
+  const onClose = () => {
+    if (!reply.raw.writableEnded) {
+      state.aborted = true;
+      controller.abort();
+    }
+  };
+  reply.raw.on("close", onClose);
+  return {
+    signal: controller.signal,
+    get aborted() {
+      return state.aborted;
+    },
+    dispose() {
+      reply.raw.off("close", onClose);
+    }
+  };
+}
+function endReply(reply) {
+  if (!reply.raw.writableEnded) {
+    reply.raw.end();
+  }
 }
 function startSse(reply, origin) {
   const headers = {

@@ -15,8 +15,16 @@ export type CodexBrowserRunRequest = {
   threadId?: string;
   cwd?: string;
   serviceName?: string;
+  signal?: AbortSignal;
   onNotification: (notification: CodexRpcNotification) => void;
 };
+
+export class CodexAbortError extends Error {
+  constructor(message = "Codex turn was aborted by the client.") {
+    super(message);
+    this.name = "CodexAbortError";
+  }
+}
 
 type JsonRpcId = number | string;
 
@@ -61,6 +69,12 @@ export class CodexRpcClient {
   }
 
   async runBrowserPrompt(request: CodexBrowserRunRequest) {
+    const { signal } = request;
+
+    if (signal?.aborted) {
+      throw new CodexAbortError();
+    }
+
     await this.withConnection(async (connection) => {
       let activeTurnId = "";
       let finishRun: (() => void) | null = null;
@@ -74,6 +88,23 @@ export class CodexRpcClient {
       const timeout = setTimeout(() => {
         failRun?.(new Error("Codex turn timed out before completion."));
       }, this.config.turnTimeoutMs ?? 600000);
+
+      // Aborting closes the WebSocket connection, which causes the running turn
+      // to stop on the Codex app-server side instead of finishing silently.
+      const onAbort = () => {
+        failRun?.(new CodexAbortError());
+        connection.close();
+      };
+
+      if (signal) {
+        signal.addEventListener("abort", onAbort, { once: true });
+
+        // The connection may have been opened while the signal was already
+        // aborted; addEventListener does not fire for an already-aborted signal.
+        if (signal.aborted) {
+          onAbort();
+        }
+      }
 
       connection.onClose = () => {
         failRun?.(new Error("Codex app-server connection closed before the turn completed."));
@@ -200,6 +231,7 @@ export class CodexRpcClient {
         await turnCompleted;
       } finally {
         clearTimeout(timeout);
+        signal?.removeEventListener("abort", onAbort);
       }
     });
   }

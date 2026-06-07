@@ -311,6 +311,46 @@ button:hover:not(:disabled) {
   font-size: 12px;
 }
 
+.status .statusText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stopButton {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 11px;
+  color: #b42318;
+  border: 1px solid rgba(180, 35, 24, 0.32);
+  border-radius: 9px;
+  background: rgba(180, 35, 24, 0.08);
+  font-family: "Avenir Next", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.stopButton:hover {
+  background: rgba(180, 35, 24, 0.14);
+}
+
+.panel[data-theme="dark"] .stopButton {
+  color: #ff9d93;
+  border-color: rgba(255, 157, 147, 0.34);
+  background: rgba(255, 157, 147, 0.12);
+}
+
+.resultToolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
 .signal {
   display: inline-block;
   flex: 0 0 auto;

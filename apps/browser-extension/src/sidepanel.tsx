@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import {
   BookOpen,
   Copy,
+  Eraser,
   FileText,
   Info,
   Languages,
@@ -15,6 +16,7 @@ import {
   Settings,
   ShieldAlert,
   Sparkles,
+  Square,
   Sun
 } from "lucide-react";
 import type { BrowserAction, CapturedPage, CaptureResponse } from "./types";
@@ -145,6 +147,8 @@ function SidePanel() {
   const [lastError, setLastError] = useState<{ code: string; message: string; at: string } | null>(null);
   const [sensitiveOverride, setSensitiveOverride] = useState(false);
   const [blockedAction, setBlockedAction] = useState<BrowserAction | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const resettingRef = useRef(false);
 
   useEffect(() => {
     void refreshHealth();
@@ -313,6 +317,10 @@ function SidePanel() {
   }
 
   async function runAction(action: BrowserAction, options: { force?: boolean } = {}) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setRunningAction(action);
     setExchanges([]);
     setThreadId(null);
@@ -355,7 +363,8 @@ function SidePanel() {
             documentFormat,
             customInstruction: customInstructionFor(action)
           }
-        })
+        }),
+        signal: controller.signal
       });
 
       if (!response.ok) {
@@ -370,8 +379,15 @@ function SidePanel() {
       await refreshHealth();
       setStatus("완료");
     } catch (error) {
-      handleStreamError(error);
+      if (isAbortError(error)) {
+        handleAborted();
+      } else {
+        handleStreamError(error);
+      }
     } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       setRunningAction(null);
     }
   }
@@ -394,6 +410,10 @@ function SidePanel() {
       return;
     }
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setFollowupRunning(true);
     setStatus("이전 대화에 이어서 질문하는 중입니다.");
     appendExchange({ id: createExchangeId(), kind: "followup", question, content: "" });
@@ -409,7 +429,8 @@ function SidePanel() {
           prompt: question,
           model: activeModel ?? undefined,
           source: "chrome-extension"
-        })
+        }),
+        signal: controller.signal
       });
 
       if (!response.ok) {
@@ -424,10 +445,53 @@ function SidePanel() {
       setFollowupInput("");
       setStatus("완료");
     } catch (error) {
-      handleStreamError(error);
+      if (isAbortError(error)) {
+        handleAborted();
+      } else {
+        handleStreamError(error);
+      }
     } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       setFollowupRunning(false);
     }
+  }
+
+  function stopRun() {
+    if (!abortRef.current) {
+      return;
+    }
+
+    setStatus("작업을 중단하는 중입니다.");
+    abortRef.current.abort();
+  }
+
+  function resetWorkspace() {
+    if (abortRef.current) {
+      resettingRef.current = true;
+      abortRef.current.abort();
+    }
+
+    abortRef.current = null;
+    setExchanges([]);
+    setThreadId(null);
+    setActiveModel(null);
+    setFollowupInput("");
+    setBlockedAction(null);
+    setCopied(false);
+    setStatus("현재 탭을 읽고 작업을 선택하세요.");
+  }
+
+  function handleAborted() {
+    // A reset already cleared the workspace, so skip the "중단됨" marker.
+    if (resettingRef.current) {
+      resettingRef.current = false;
+      return;
+    }
+
+    setStatus("중단됨");
+    appendToLastExchange("⏹ 중단됨", "\n\n");
   }
 
   function appendExchange(exchange: Exchange) {
@@ -651,7 +715,13 @@ function SidePanel() {
 
           <section className="status">
             <span className={`signal ${modelHealth.status}`} />
-            {status}
+            <span className="statusText">{status}</span>
+            {streaming ? (
+              <button className="stopButton" onClick={stopRun} title="작업 중단" type="button">
+                <Square size={13} />
+                중단
+              </button>
+            ) : null}
           </section>
 
           {blockedAction ? (
@@ -670,10 +740,22 @@ function SidePanel() {
           <section className="resultShell">
             <div className="resultToolbar">
               <strong>산출물</strong>
-              <button aria-label="산출물 복사" disabled={!transcript} onClick={() => void copyResult()} title="산출물 복사" type="button">
-                <Copy size={15} />
-                {copied ? "복사됨" : "Copy"}
-              </button>
+              <div className="resultToolbarActions">
+                <button
+                  aria-label="결과 초기화"
+                  disabled={exchanges.length === 0 && !streaming}
+                  onClick={resetWorkspace}
+                  title="결과 초기화"
+                  type="button"
+                >
+                  <Eraser size={15} />
+                  초기화
+                </button>
+                <button aria-label="산출물 복사" disabled={!transcript} onClick={() => void copyResult()} title="산출물 복사" type="button">
+                  <Copy size={15} />
+                  {copied ? "복사됨" : "Copy"}
+                </button>
+              </div>
             </div>
             <article className="result">
               {exchanges.length === 0 ? (
@@ -1035,6 +1117,14 @@ function extractModelOptions(value: unknown): ModelOption[] {
       name: model.name
     }))
     .filter((model) => model.id);
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return true;
+  }
+
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function isNetworkError(error: unknown): boolean {
